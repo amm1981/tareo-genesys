@@ -1,0 +1,60 @@
+# Plantilla para revisar tras el inventario. NO instalar sin reemplazar __...__.
+# La ruta __APP_CURRENT__ apunta al release activo que contiene server/.
+# El certificado debe existir antes de habilitar este bloque.
+server {
+    listen 80;
+    server_name api.labour.agrocalera.app;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root __ACME_WEBROOT__;
+        try_files $uri =404;
+    }
+    location / {
+        return 301 https://api.labour.agrocalera.app$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name api.labour.agrocalera.app;
+    root __APP_CURRENT__/server/public;
+    index index.php;
+    charset utf-8;
+
+    ssl_certificate __TLS_FULLCHAIN__;
+    ssl_certificate_key __TLS_PRIVATE_KEY__;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    client_max_body_size 12m;
+    client_body_timeout 60s;
+    server_tokens off;
+    add_header X-Content-Type-Options nosniff always;
+    add_header X-Frame-Options DENY always;
+    add_header Referrer-Policy no-referrer always;
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+        fastcgi_param HTTPS on;
+        fastcgi_param HTTP_PROXY "";
+        fastcgi_pass unix:/run/php/get-genesys-php83.sock;
+        fastcgi_connect_timeout 10s;
+        fastcgi_send_timeout 120s;
+        fastcgi_read_timeout 300s;
+        fastcgi_request_buffering on;
+    }
+
+    location ~ \.php$ { return 404; }
+    location ~ /\.(?!well-known).* { deny all; }
+
+    error_page 413 = @json_too_large;
+    location @json_too_large {
+        default_type application/json;
+        return 413 '{"error":{"code":"body_too_large","message":"Solicitud demasiado grande."}}';
+    }
+}

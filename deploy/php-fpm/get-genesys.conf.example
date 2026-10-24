@@ -1,0 +1,28 @@
+; Plantilla de pool propio. Revisar usuarios, recursos y ruta despues del inventario.
+; No reemplazar www.conf ni pools de otras aplicaciones.
+[get-genesys]
+user = __APP_USER__
+group = __APP_GROUP__
+listen = /run/php/get-genesys-php83.sock
+listen.owner = __NGINX_USER__
+listen.group = __NGINX_GROUP__
+listen.mode = 0660
+
+pm = ondemand
+pm.max_children = 4
+pm.process_idle_timeout = 30s
+pm.max_requests = 500
+request_terminate_timeout = 300s
+clear_env = yes
+security.limit_extensions = .php
+
+; Se aplica antes de analizar la peticion. No sustituir por ini_set() o .user.ini.
+php_admin_flag[session.upload_progress.enabled] = off
+php_admin_flag[display_errors] = off
+php_admin_flag[log_errors] = on
+php_admin_flag[expose_php] = off
+php_admin_value[error_log] = __APP_SHARED__/php-fpm-error.log
+php_admin_value[post_max_size] = 12M
+php_admin_value[upload_max_filesize] = 1M
+php_admin_value[memory_limit] = 256M
+php_admin_value[max_execution_time] = 240
