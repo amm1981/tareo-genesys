@@ -18,8 +18,9 @@ Comprobaciones del 23 de octubre de 2026, hora de Lima:
 | API por HTTP local | Salud 200; token inválido 401; token local válido accede al estado y recibe 404 para un UUID inexistente |
 | Primera transferencia real | UUID `1eab833e-4cc8-473c-a90a-9cd35e744821`, completada: 35 354/35 354 filas y 36/36 lotes; snapshot activo de septiembre 2026 verificado |
 | Verificación posterior | 35 354 filas activas del 1 al 30 de septiembre; JSON idéntico a staging y 247 478 campos numéricos comparados sin diferencias |
-| Pruebas | 20 Vitest, 25 PHPUnit; integración sintética Node → kernel HTTP Laravel → MySQL con `DECIMAL(38,8)` y costos `DECIMAL(65,30)` correcta |
+| Pruebas | 20 Vitest, 45 PHPUnit; integración sintética Node → kernel HTTP Laravel → MySQL con `DECIMAL(38,8)`, costos `DECIMAL(65,30)`, login y consulta paginada |
 | PHP de producción elegido | Ubuntu 24.04 LTS, paquete PHP `8.3.6-0ubuntu0.24.04.13`; dependencias resueltas con plataforma Composer `8.3.6` |
+| Consulta para sistemas externos | Login JSON usuario/contraseña, Bearer `costs:read`, revocación y consulta mensual paginada de publicaciones; ver [API_CONSULTA.md](docs/API_CONSULTA.md) |
 
 El desarrollo está implementado y la primera transferencia real ya está publicada en MySQL local. El usuario confirmó el envío de septiembre de 2026 y los 36 lotes se completaron. Se verificaron las 35 354 filas activas, su JSON completo frente a staging y sus siete campos numéricos estructurados frente al JSON, sin diferencias. La comparación independiente con SSMS no se da por realizada automáticamente: sigue siendo una validación del usuario responsable. Las cuatro columnas de costos son FLOAT aproximado del origen; DECIMAL(65,30) conserva su representación enviada sin atribuirles una exactitud que el SP no entrega. MONEY y NUMERIC conservan sus escalas originales. No se calcularon totales mezclando operaciones o columnas. Consulte [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md), [docs/MAPEO_ORIGEN.md](docs/MAPEO_ORIGEN.md) y [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 
@@ -207,12 +208,18 @@ Sin `--mes`, se ejecuta `@Mes=NULL`, filtra el año y reserva/publica los doce m
 | Método | Ruta | Acceso |
 | --- | --- | --- |
 | GET | `/api/health` | Mínimo público |
+| POST | `/api/v1/auth/login` | Body JSON `usuario` y `password`; devuelve token de lectura |
+| POST | `/api/v1/auth/logout` | Bearer Sanctum exclusivo `costs:read`; revoca el token actual |
+| GET | `/api/v1/costos/periodos?anio=2026` | Cuenta habilitada y token de lectura |
+| GET | `/api/v1/costos?anio=2026&mes=9` | Cuenta habilitada y token de lectura; paginación por cursor |
 | POST | `/api/v1/sync/runs` | Bearer Sanctum `sync:write` |
 | POST | `/api/v1/sync/runs/{uuid}/batches` | Mismo permiso y propietario |
 | POST | `/api/v1/sync/runs/{uuid}/complete` | Mismo permiso y propietario |
 | GET | `/api/v1/sync/runs/{uuid}/status` | Mismo permiso y propietario |
 
 Éxito: `{"data":...}`. Error: `{"error":{"code":"...","message":"..."}}`. Un lote contiene `numero_lote`, `payload` (string JSON de filas con `numero_fila` y `datos_json`) y su SHA-256 UTF-8. El hash global es SHA-256 de concatenar `numero_lote:checksum\n` en orden. La ejecución incluye `schema_json` y su hash, cantidad esperada y cantidad de lotes. Consulte la implementación y fixtures para el contrato exacto. Las solicitudes POST requieren JSON y se limitan por tamaño y frecuencia (120/minuto). HTTP solo se permite para localhost en entorno local/testing; producción requiere HTTPS.
+
+El acceso de lectura se administra desde `server/` mediante `php artisan api:usuario mi_sistema`; solicita contraseña oculta. El login emite un token de 60 minutos con permiso exclusivo `costs:read`, separado del de sincronización. La lectura conserva las columnas originales y expone importes como strings decimales; consulta la publicación activa de cada mes con cursor consistente. Los filtros, ejemplos y límites específicos están en [docs/API_CONSULTA.md](docs/API_CONSULTA.md).
 
 ## 10. Consultar lo publicado en MySQL
 

@@ -1,9 +1,17 @@
 <?php
 
+use App\Http\Controllers\ApiAuthController;
+use App\Http\Controllers\CostQueryController;
 use App\Http\Controllers\SyncController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/health', fn () => response()->json(['data' => ['status' => 'ok']]));
+Route::post('/v1/auth/login', [ApiAuthController::class, 'login'])->middleware('throttle:api-login');
+Route::prefix('v1')->middleware(['auth:sanctum', 'query.token', 'throttle:api-query'])->group(function () {
+    Route::post('/auth/logout', [ApiAuthController::class, 'logout']);
+    Route::get('/costos/periodos', [CostQueryController::class, 'periods']);
+    Route::get('/costos', [CostQueryController::class, 'index']);
+});
 Route::prefix('v1/sync')->middleware(['auth:sanctum', 'sync.token', 'throttle:120,1'])->group(function () {
     Route::post('/runs', [SyncController::class, 'store']);
     Route::post('/runs/{uuid}/batches', [SyncController::class, 'batch'])->whereUuid('uuid');

@@ -9,7 +9,7 @@ La preparación ejecutable está en [deploy/README.md](../deploy/README.md): inv
 ## Estado previo al despliegue
 
 - Sincronización local real verificada: septiembre de 2026, 35 354 filas y 36 lotes completos.
-- API de recepción lista; todavía no están implementados los endpoints de consulta de costos para otros sistemas.
+- API de recepción y consulta implementadas. El acceso externo usa login JSON por usuario/contraseña, token exclusivo `costs:read` y paginación sobre publicaciones mensuales; ver [API_CONSULTA.md](API_CONSULTA.md).
 - Pendiente recibir el inventario del VPS y confirmar sistema operativo, versiones y servicios existentes, ruta de instalación y posible proxy/CDN.
 - Pendiente confirmar DNS A/AAAA o CNAME del dominio hacia la infraestructura elegida y emitir/verificar un certificado HTTPS válido.
 - Pendiente crear configuración, base MySQL y usuario propios de producción, desplegar server/, migrar, copiar el esquema aprobado, emitir el token de producción y probar el primer envío manual al VPS.
@@ -64,6 +64,7 @@ Después de comprobar HTTPS y `/api/health`, actualizar el `.env` del cliente co
 9. Ejecutar `php artisan config:cache`, `route:cache` y verificar `/api/health`, rechazo sin token, emisión de token exclusivo y estado autenticado. No ejecutar pruebas destructivas contra la base desplegada.
 10. Emitir el token con `php artisan sync:token --days=30` en una terminal privada. Guardarlo en `client/.env` y cambiar `API_BASE_URL` a HTTPS. No usar `--save-client-env` fuera de local.
 11. Primer envío solo después de dry-run, comparación con SSMS y confirmación manual explícita del período. Validar conteos y referencias activas sin imprimir filas personales en logs.
+12. Crear una cuenta de lectura por sistema mediante `php8.3 artisan api:usuario mi_sistema`. La contraseña se introduce oculta en consola. Verificar login, consulta por año/mes y logout con el token de lectura, sin reutilizar el token de sincronización.
 
 No instalar cron, workers ni tareas automáticas. Documentar renovación/revocación manual de tokens, respaldos, retención de staging/versiones y monitoreo de espacio. Un fallo de transferencia conserva el snapshot anterior; un rollback de aplicación debe conservar datos/esquema compatible y no ejecutar migraciones inversas que eliminen columnas de origen.
 

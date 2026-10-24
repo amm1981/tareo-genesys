@@ -91,7 +91,30 @@ try {
     $call($base.'/'.$plan['uuid'].'/complete', ['checksum_total' => $plan['checksum_total']]);
     $active = DB::table('sync_periods')->value('active_run_id');
     check($active !== $old && DB::table('costos_agricolas')->where('sync_run_id', $active)->count() === 2, 'Reemplazo incorrecto.');
-    echo "OK: protocolo Node → HTTP Laravel → MySQL 8, DECIMAL(38,8), idempotencia, integridad, reemplazo y rollback. Solo tablas temporales.\n";
+    $consumerPassword = Str::random(32);
+    $consumer = User::create(['name' => 'Consumer fixture', 'email' => 'consumer@invalid.test', 'password' => $consumerPassword]);
+    $consumer->forceFill(['api_username' => 'consumer-fixture', 'api_enabled' => true])->save();
+    $app['auth']->forgetGuards();
+    $login = Request::create('http://127.0.0.1/api/v1/auth/login', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_ACCEPT' => 'application/json'], json_encode(['usuario' => 'consumer-fixture', 'password' => $consumerPassword], JSON_THROW_ON_ERROR));
+    $loginResponse = $kernel->handle($login);
+    check($loginResponse->getStatusCode() === 200, 'Fallo de login de consulta en MySQL.');
+    $readToken = json_decode($loginResponse->getContent(), true, 512, JSON_THROW_ON_ERROR)['data']['access_token'];
+    $read = function (array $query) use ($kernel, $readToken, $app) {
+        $app['auth']->forgetGuards();
+        $request = Request::create('http://127.0.0.1/api/v1/costos?'.http_build_query($query), 'GET', [], [], [], ['HTTP_ACCEPT' => 'application/json', 'HTTP_AUTHORIZATION' => 'Bearer '.$readToken]);
+        $response = $kernel->handle($request);
+        check($response->getStatusCode() === 200, 'Fallo de consulta HTTP de publicación.');
+
+        return json_decode($response->getContent(), true, 512, JSON_THROW_ON_ERROR);
+    };
+    $page = $read(['anio' => 2026, 'mes' => 9, 'limite' => 1]);
+    check(count($page['data']) === 1 && $page['meta']['publicacion_uuid'] === $plan['uuid'], 'La consulta no eligió la versión publicada.');
+    check($page['data'][0]['datos']['ImporteFixture'] === '123456789012345678901234567890.12345678', 'La API de consulta alteró DECIMAL(38,8).');
+    check($page['data'][0]['datos']['CostoMPSoles'] === '0.30000000000000004', 'La API de consulta redondeó el costo FLOAT.');
+    check($page['data'][0]['datos']['CostoMPUS$'] === '0.0000000000000000000000001', 'La API de consulta alteró el exponente.');
+    $next = $read(['anio' => 2026, 'mes' => 9, 'limite' => 1, 'cursor' => $page['meta']['paginacion']['siguiente_cursor']]);
+    check($next['data'][0]['numero_fila'] === 2 && $next['meta']['paginacion']['siguiente_cursor'] === null, 'Paginación de consulta incorrecta.');
+    echo "OK: protocolo Node → HTTP Laravel → MySQL 8, decimales, idempotencia, integridad, reemplazo y consulta paginada exacta. Solo tablas temporales.\n";
 } finally {
     if (DB::transactionLevel() > 0) {
         DB::rollBack();

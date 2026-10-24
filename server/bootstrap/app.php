@@ -2,6 +2,7 @@
 
 use App\Exceptions\SyncException;
 use App\Http\Middleware\ApiBoundary;
+use App\Http\Middleware\QueryToken;
 use App\Http\Middleware\SyncToken;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -22,7 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware) {
         $middleware->remove([TrimStrings::class, ConvertEmptyStringsToNull::class]);
         $middleware->api(prepend: [ApiBoundary::class]);
-        $middleware->alias(['sync.token' => SyncToken::class]);
+        $middleware->alias(['sync.token' => SyncToken::class, 'query.token' => QueryToken::class]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
         $exceptions->shouldRenderJsonWhen(fn () => true);
@@ -33,14 +34,17 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         })->stop();
         $exceptions->render(function (Throwable $e, Request $request) {
+            $private = ['Cache-Control' => 'no-store, private'];
             if ($e instanceof SyncException) {
-                return response()->json(['error' => ['code' => $e->errorCode, 'message' => $e->getMessage()]], $e->status);
+                return response()->json(['error' => ['code' => $e->errorCode, 'message' => $e->getMessage()]], $e->status, $private);
             }
             if ($e instanceof ValidationException) {
-                return response()->json(['error' => ['code' => 'validation_failed', 'message' => 'Entrada inválida.']], 422);
+                return response()->json(['error' => ['code' => 'validation_failed', 'message' => 'Entrada inválida.']], 422, $private);
             }
             $status = $e instanceof AuthenticationException ? 401 : ($e instanceof HttpExceptionInterface ? $e->getStatusCode() : 500);
 
-            return response()->json(['error' => ['code' => 'http_'.$status, 'message' => $status >= 500 ? 'Error interno. Consulte al administrador.' : 'Solicitud rechazada.']], $status);
+            $headers = $private + ($e instanceof HttpExceptionInterface ? $e->getHeaders() : []);
+
+            return response()->json(['error' => ['code' => 'http_'.$status, 'message' => $status >= 500 ? 'Error interno. Consulte al administrador.' : 'Solicitud rechazada.']], $status, $headers);
         });
     })->create();

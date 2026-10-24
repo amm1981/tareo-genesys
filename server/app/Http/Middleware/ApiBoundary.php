@@ -20,6 +20,9 @@ class ApiBoundary
             throw new SyncException('json_required', 'Se requiere application/json.', 415);
         }
 
-        return $next($request);
+        $response = $next($request);
+        $response->headers->set('Cache-Control', 'no-store, private');
+
+        return $response;
     }
 }

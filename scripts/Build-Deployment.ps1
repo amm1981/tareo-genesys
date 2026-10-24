@@ -54,7 +54,7 @@ if ($schemaHash -ne $expectedSchemaHash) { throw 'Cambio del esquema: revisar an
 foreach ($directory in @('server/app','server/config','server/routes','server/database/migrations','server/database/seeders','server/database/factories','server/public','deploy')) {
     Copy-ReleaseTree $directory
 }
-foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md')) {
+foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md','docs/API_CONSULTA.md')) {
     Copy-ReleaseFile $file $file
 }
 Copy-ReleaseFile 'deploy/production.env.example' 'server/.env.example'
@@ -73,7 +73,7 @@ Destino: Ubuntu 24.04, PHP 8.3.6-0ubuntu0.24.04.13 o revision oficial posterior 
 Esquema SHA256: $schemaHash
 
 Comenzar por deploy/README.md. Las configuraciones .example requieren el inventario del VPS.
-El paquete contiene la API receptora y metadatos de columnas. No incluye credenciales, datos locales ni endpoints de consulta de costos.
+El paquete contiene la API receptora, login y consulta de costos publicados, con metadatos de columnas. No incluye credenciales ni datos locales. Crear cada cuenta consumidora en consola; consultar docs/API_CONSULTA.md.
 No ejecutar migraciones o cambios de servicios antes de revisar el inventario y autorizar el despliegue.
 "@
 [IO.File]::WriteAllText((Join-Path $stage 'RELEASE.md'),$releaseNotes,$utf8)

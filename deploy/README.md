@@ -22,7 +22,7 @@ La frase de paso se introduce exclusivamente en la terminal SSH. `tr` elimina lo
 - `manifest.json`: SHA-256 de cada archivo del release.
 - `RELEASE.md`: identificación y requisitos.
 
-No incluye `client/`, credenciales SQL, `.env` real, tokens, vendor/, node_modules/, tests/, logs, caches locales ni las 35 354 filas del MySQL local. Solo contiene la API receptora; los endpoints de lectura de costos para otros sistemas son un desarrollo pendiente.
+No incluye `client/`, credenciales SQL, `.env` real, tokens, vendor/, node_modules/, tests/, logs, caches locales ni las 35 354 filas del MySQL local. Contiene recepción y consulta autenticada de costos publicados. El contrato para consumidores está en [docs/API_CONSULTA.md](../docs/API_CONSULTA.md).
 
 ## 3. Generar, transferir y verificar
 
@@ -136,6 +136,8 @@ El token se muestra una sola vez para copiarlo a client/.env local. No usar el t
 
 El script lo pide de forma oculta, consulta un UUID inexistente y espera 404 después de autenticar. No envía registros.
 
+Para cada sistema consumidor crear una cuenta con `php8.3 artisan api:usuario mi_sistema --nombre="Sistema consumidor"`. La consola solicita la contraseña oculta; no se crea ninguna cuenta por defecto. La migración adicional de users conserva las cuentas existentes y las deja sin acceso de consulta hasta habilitarlas expresamente. Probar el login JSON y los endpoints `/api/v1/costos/periodos` y `/api/v1/costos` con el token de lectura según `docs/API_CONSULTA.md`. La consulta requiere datos publicados: sin el primer envío se devuelve 404 para el mes. Mantener `API_QUERY_TOKEN_TTL_MINUTES=60` salvo que se acuerde otra vigencia.
+
 ## 8. Primer envío al VPS
 
 Una vez validada la infraestructura, editar **manualmente** client/.env en la laptop:
@@ -165,4 +167,4 @@ Comprobar estado completado, cantidades y snapshot activo de septiembre en la ba
 - Respaldar MySQL, shared/.env y el esquema privado con los mecanismos existentes del VPS. Mantener la clave APP_KEY en futuras actualizaciones.
 - Definir retención y renovación/revocación manual de tokens. No se instalan cron, colas, workers de Laravel ni tareas automáticas.
 
-La instalación y validación real del VPS quedan pendientes de su inventario y autorización de cambios. Este paquete conserva el alcance de la API receptora ya probada localmente.
+La instalación y validación real del VPS quedan pendientes de su inventario y autorización de cambios. La recepción y la consulta se verifican localmente antes de generar el paquete.

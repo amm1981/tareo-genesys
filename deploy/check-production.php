@@ -3,6 +3,7 @@
 use App\Services\SourceSchema;
 use Illuminate\Contracts\Console\Kernel;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\Process\Process;
 
 // Comprobaciones CLI y consultas de lectura. No instala paquetes ni cambia datos.
@@ -72,6 +73,7 @@ if ($dbSafe && app()->environment('production')) {
         $tables = ['sync_runs', 'sync_periods', 'sync_batches', 'staging_costos', 'costos_agricolas'];
         $engines = $db->table('information_schema.TABLES')->where('TABLE_SCHEMA', $db->getDatabaseName())->whereIn('TABLE_NAME', $tables)->pluck('ENGINE');
         $check('Cinco tablas de sincronizacion InnoDB', $engines->count() === 5 && ! $engines->contains(fn ($v) => $v !== 'InnoDB'));
+        $check('Migracion de cuentas de consulta disponible', Schema::hasColumns('users', ['api_username', 'api_enabled']));
         $schemaFile = (string) config('sync.schema_file');
         if (is_file($schemaFile)) {
             app(SourceSchema::class)->approved(file_get_contents($schemaFile));
