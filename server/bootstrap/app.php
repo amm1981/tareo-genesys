@@ -21,6 +21,8 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
     )
     ->withMiddleware(function (Middleware $middleware) {
+        // API sin login web: responder 401 a invitados; el endpoint POST /api/v1/auth/login permanece.
+        $middleware->redirectGuestsTo(static fn () => null);
         $middleware->remove([TrimStrings::class, ConvertEmptyStringsToNull::class]);
         $middleware->api(prepend: [ApiBoundary::class]);
         $middleware->alias(['sync.token' => SyncToken::class, 'query.token' => QueryToken::class]);

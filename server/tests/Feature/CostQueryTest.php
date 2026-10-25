@@ -162,6 +162,22 @@ class CostQueryTest extends TestCase
         $this->getJson('/api/v1/costos/periodos')->assertUnprocessable();
     }
 
+    public function test_unauthenticated_cost_requests_return_401_without_json_accept_header(): void
+    {
+        $this->withoutHeader('Authorization');
+        $this->withHeader('Accept', '*/*');
+
+        foreach ([
+            '/api/v1/costos?anio=2026&mes=9',
+            '/api/v1/costos/periodos?anio=2026',
+        ] as $url) {
+            $this->app['auth']->forgetGuards();
+            $this->get($url)
+                ->assertUnauthorized()
+                ->assertJsonPath('error.code', 'http_401');
+        }
+    }
+
     public function test_query_and_sync_permissions_are_exclusive_and_bearer_is_required(): void
     {
         $this->postJson('/api/v1/sync/runs', [])->assertForbidden();
