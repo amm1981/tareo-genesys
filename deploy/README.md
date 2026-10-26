@@ -165,6 +165,6 @@ Comprobar estado completado, cantidades y snapshot activo de septiembre en la ba
 - Para abandonar una transferencia, `php8.3 artisan sync:abort UUID` libera su período conservando los datos.
 - Si falla el código nuevo, volver al release previo y recargar de forma revisada el pool si fuera necesario. No invertir migraciones para borrar columnas o versiones.
 - Respaldar MySQL, shared/.env y el esquema privado con los mecanismos existentes del VPS. Mantener la clave APP_KEY en futuras actualizaciones.
-- Definir retención y renovación/revocación manual de tokens. No se instalan cron, colas, workers de Laravel ni tareas automáticas.
+- Definir retención y renovación/revocación manual de tokens. No se instalan cron, colas ni workers de Laravel. La automatización de Windows se entrega como preparación sin instalar tareas; ver [AUTOMATIZACION.md](../docs/AUTOMATIZACION.md).
 
 La instalación y validación real del VPS quedan pendientes de su inventario y autorización de cambios. La recepción y la consulta se verifican localmente antes de generar el paquete.

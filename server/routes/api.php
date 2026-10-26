@@ -13,8 +13,10 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'query.token', 'throttle:api-qu
     Route::get('/costos', [CostQueryController::class, 'index']);
 });
 Route::prefix('v1/sync')->middleware(['auth:sanctum', 'sync.token', 'throttle:120,1'])->group(function () {
+    Route::get('/publication', [SyncController::class, 'publication']);
     Route::post('/runs', [SyncController::class, 'store']);
     Route::post('/runs/{uuid}/batches', [SyncController::class, 'batch'])->whereUuid('uuid');
     Route::post('/runs/{uuid}/complete', [SyncController::class, 'complete'])->whereUuid('uuid');
     Route::get('/runs/{uuid}/status', [SyncController::class, 'status'])->whereUuid('uuid');
+    Route::get('/runs/{uuid}/verification', [SyncController::class, 'verification'])->whereUuid('uuid');
 });

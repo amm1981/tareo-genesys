@@ -1,10 +1,10 @@
 # tareo-genesys
 
-Proyecto **GET_Genesys**. Backend de ejecución **manual**: SQL Server **CASABLANCA** → cliente Node.js/TypeScript → API Laravel 12 con Sanctum → MySQL 8. Sin frontend, Docker, cron ni sincronización automática. El nombre del proyecto no identifica la base de origen.
+Proyecto **GET_Genesys**. SQL Server **CASABLANCA** → cliente Node.js/TypeScript → API Laravel 12 con Sanctum → MySQL 8. Conserva el envío manual y agrega automatización BACKFILL/DAILY preparada para Windows Task Scheduler. Sin frontend, Docker ni cron. La automatización todavía no se ha activado ni se ha ejecutado la carga masiva. El nombre del proyecto no identifica la base de origen.
 
 ## Estado verificado del desarrollo
 
-Comprobaciones del 23 de octubre de 2026, hora de Lima:
+Comprobaciones locales actualizadas al 25 de octubre de 2026, hora de Lima. La transferencia histórica indicada corresponde al 23 de octubre:
 
 | Componente | Resultado real |
 | --- | --- |
@@ -18,9 +18,10 @@ Comprobaciones del 23 de octubre de 2026, hora de Lima:
 | API por HTTP local | Salud 200; token inválido 401; token local válido accede al estado y recibe 404 para un UUID inexistente |
 | Primera transferencia real | UUID `1eab833e-4cc8-473c-a90a-9cd35e744821`, completada: 35 354/35 354 filas y 36/36 lotes; snapshot activo de septiembre 2026 verificado |
 | Verificación posterior | 35 354 filas activas del 1 al 30 de septiembre; JSON idéntico a staging y 247 478 campos numéricos comparados sin diferencias |
-| Pruebas | 20 Vitest, 45 PHPUnit; integración sintética Node → kernel HTTP Laravel → MySQL con `DECIMAL(38,8)`, costos `DECIMAL(65,30)`, login y consulta paginada |
+| Pruebas | 46 Vitest, 51 PHPUnit; automatización con HTTP local y checkpoints sintéticos, pruebas manuales existentes y API de terceros |
 | PHP de producción elegido | Ubuntu 24.04 LTS, paquete PHP `8.3.6-0ubuntu0.24.04.13`; dependencias resueltas con plataforma Composer `8.3.6` |
 | Consulta para sistemas externos | Login JSON usuario/contraseña, Bearer `costs:read`, revocación y consulta mensual paginada de publicaciones; ver [API_CONSULTA.md](docs/API_CONSULTA.md) |
+| Automatización preparada | BACKFILL desde enero 2023, DAILY de 30 fechas Lima, recuperación por UUID, bloqueo, guardas de disco/vacíos y XML de tarea; ver [AUTOMATIZACION.md](docs/AUTOMATIZACION.md) |
 
 El desarrollo está implementado y la primera transferencia real ya está publicada en MySQL local. El usuario confirmó el envío de septiembre de 2026 y los 36 lotes se completaron. Se verificaron las 35 354 filas activas, su JSON completo frente a staging y sus siete campos numéricos estructurados frente al JSON, sin diferencias. La comparación independiente con SSMS no se da por realizada automáticamente: sigue siendo una validación del usuario responsable. Las cuatro columnas de costos son FLOAT aproximado del origen; DECIMAL(65,30) conserva su representación enviada sin atribuirles una exactitud que el SP no entrega. MONEY y NUMERIC conservan sus escalas originales. No se calcularon totales mezclando operaciones o columnas. Consulte [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md), [docs/MAPEO_ORIGEN.md](docs/MAPEO_ORIGEN.md) y [docs/DESPLIEGUE.md](docs/DESPLIEGUE.md).
 
@@ -216,6 +217,8 @@ Sin `--mes`, se ejecuta `@Mes=NULL`, filtra el año y reserva/publica los doce m
 | POST | `/api/v1/sync/runs/{uuid}/batches` | Mismo permiso y propietario |
 | POST | `/api/v1/sync/runs/{uuid}/complete` | Mismo permiso y propietario |
 | GET | `/api/v1/sync/runs/{uuid}/status` | Mismo permiso y propietario |
+| GET | `/api/v1/sync/publication?anio=2026&mes=9` | `sync:write`; inspección de referencias activa y pendiente propias |
+| GET | `/api/v1/sync/runs/{uuid}/verification` | `sync:write`; estado, cantidades, esquema y ledger propios |
 
 Éxito: `{"data":...}`. Error: `{"error":{"code":"...","message":"..."}}`. Un lote contiene `numero_lote`, `payload` (string JSON de filas con `numero_fila` y `datos_json`) y su SHA-256 UTF-8. El hash global es SHA-256 de concatenar `numero_lote:checksum\n` en orden. La ejecución incluye `schema_json` y su hash, cantidad esperada y cantidad de lotes. Consulte la implementación y fixtures para el contrato exacto. Las solicitudes POST requieren JSON y se limitan por tamaño y frecuencia (120/minuto). HTTP solo se permite para localhost en entorno local/testing; producción requiere HTTPS.
 
@@ -245,6 +248,8 @@ GROUP BY r.id, r.uuid, r.total_esperado;
 Ejecute consultas locales con `mysql.exe --host=127.0.0.1 --port=3306 --user=root --database=get_genesys`. Consulte únicamente columnas monetarias reales verificadas; no convierta DECIMAL a float en herramientas posteriores.
 
 ## 11. Pruebas
+
+La automatización y su plan de despliegue se documentan en [docs/AUTOMATIZACION.md](docs/AUTOMATIZACION.md). Para revisar calendarios sin consultas ni envíos: `npm run sync:backfill -- --plan` y `npm run sync:daily -- --plan`, desde client/. Los mismos comandos sin `--plan` ejecutan trabajo real y quedan pendientes de autorización operativa. La tarea solo se exporta a XML por defecto; no se ha instalado.
 
 ```powershell
 Set-Location 'C:\Users\AlonsoMendoza\Documents\Proyectos\GET_Genesys\client'

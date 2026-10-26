@@ -4,6 +4,7 @@ use App\Models\User;
 use App\Services\FloatCost;
 use App\Services\SourceSchema;
 use Illuminate\Contracts\Console\Kernel;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -19,6 +20,8 @@ if (DB::getDriverName() !== 'mysql' || DB::getDatabaseName() !== 'get_genesys' |
 $fixture = json_decode(file_get_contents(__DIR__.'/../../client/.runs/protocol-fixture.json'), true, 512, JSON_THROW_ON_ERROR);
 $tables = ['users', 'personal_access_tokens', 'sync_runs', 'sync_periods', 'sync_batches', 'staging_costos', 'costos_agricolas'];
 $created = [];
+$failed = false;
+$fixtureSchema = storage_path('app/private/schema-test-'.Str::uuid().'.json');
 function check(bool $condition, string $message): void
 {
     if (! $condition) {
@@ -26,6 +29,13 @@ function check(bool $condition, string $message): void
     }
 }
 try {
+    $schemaHandle = fopen($fixtureSchema, 'x');
+    if (! $schemaHandle) {
+        throw new RuntimeException('No se pudo preparar el esquema sintético privado.');
+    }
+    fwrite($schemaHandle, $fixture['plan']['schema_json']);
+    fclose($schemaHandle);
+    config(['sync.schema_file' => $fixtureSchema]);
     foreach ($tables as $table) {
         $definition = (array) DB::selectOne("SHOW CREATE TABLE `$table`");
         $sql = str_replace('CREATE TABLE', 'CREATE TEMPORARY TABLE', $definition['Create Table']);
@@ -114,7 +124,16 @@ try {
     check($page['data'][0]['datos']['CostoMPUS$'] === '0.0000000000000000000000001', 'La API de consulta alteró el exponente.');
     $next = $read(['anio' => 2026, 'mes' => 9, 'limite' => 1, 'cursor' => $page['meta']['paginacion']['siguiente_cursor']]);
     check($next['data'][0]['numero_fila'] === 2 && $next['meta']['paginacion']['siguiente_cursor'] === null, 'Paginación de consulta incorrecta.');
-    echo "OK: protocolo Node → HTTP Laravel → MySQL 8, decimales, idempotencia, integridad, reemplazo y consulta paginada exacta. Solo tablas temporales.\n";
+    $app['auth']->forgetGuards();
+    $inspection = Request::create('http://127.0.0.1/api/v1/sync/publication?anio=2026&mes=9', 'GET', [], [], [], ['HTTP_ACCEPT' => 'application/json', 'HTTP_AUTHORIZATION' => 'Bearer '.$token]);
+    $inspectionResponse = $kernel->handle($inspection);
+    check($inspectionResponse->getStatusCode() === 200, 'Fallo de inspección de sincronización.');
+    $metadata = json_decode($inspectionResponse->getContent(), true, 512, JSON_THROW_ON_ERROR)['data'];
+    check($metadata['active']['verificado'] === true && $metadata['active']['uuid'] === $plan['uuid'] && $metadata['active']['filas_publicadas'] === 2 && $metadata['pending'] === null, 'La inspección no verificó la publicación activa.');
+    echo "OK: protocolo Node → HTTP Laravel → MySQL 8, decimales, idempotencia, integridad, reemplazo, consulta e inspección automática. Solo tablas temporales.\n";
+} catch (Throwable $e) {
+    $failed = true;
+    fwrite(STDERR, $e instanceof QueryException ? "MYSQL_CONNECTION_OR_QUERY_FAILED: revisar MySQL local y permisos; no se imprime SQL ni valores.\n" : "MYSQL_SMOKE_ASSERTION_FAILED: revisar el fixture y la integración local.\n");
 } finally {
     if (DB::transactionLevel() > 0) {
         DB::rollBack();
@@ -122,4 +141,8 @@ try {
     foreach (array_reverse($created) as $table) {
         DB::statement("DROP TEMPORARY TABLE IF EXISTS `$table`");
     }
+    if (is_file($fixtureSchema)) {
+        unlink($fixtureSchema);
+    }
 }
+exit($failed ? 1 : 0);

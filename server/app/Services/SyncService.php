@@ -44,6 +44,53 @@ class SyncService
         return array_intersect_key((array) $run, array_flip(['uuid', 'anio', 'mes', 'estado', 'total_esperado', 'total_recibido', 'total_lotes', 'lotes_recibidos', 'fecha_inicio', 'fecha_finalizacion', 'error_resumen']));
     }
 
+    public function verification(string $uuid, int $user): array
+    {
+        $run = $this->find($uuid, $user);
+        $rows = DB::table('costos_agricolas')->where('sync_run_id', $run->id)->count();
+        $digest = hash_init('sha256');
+        $batches = 0;
+        $received = 0;
+        $ordered = true;
+        foreach (DB::table('sync_batches')->where('sync_run_id', $run->id)->orderBy('numero_lote')->select(['numero_lote', 'total_registros', 'checksum'])->cursor() as $batch) {
+            $batches++;
+            $ordered = $ordered && (int) $batch->numero_lote === $batches;
+            $received += (int) $batch->total_registros;
+            hash_update($digest, $batch->numero_lote.':'.$batch->checksum."\n");
+        }
+        $schemaFile = config('sync.schema_file');
+        $verified = $run->estado === 'completada' && $run->fecha_finalizacion !== null
+            && $rows === (int) $run->total_esperado && (int) $run->total_recibido === $rows
+            && $batches === (int) $run->total_lotes && (int) $run->lotes_recibidos === $batches
+            && $received === $rows && $ordered && hash_equals($run->checksum_total, hash_final($digest))
+            && hash_equals($run->schema_checksum, hash('sha256', $run->schema_json))
+            && is_file($schemaFile) && hash_equals($run->schema_checksum, hash_file('sha256', $schemaFile));
+        if ($verified) {
+            $this->schema->approved($run->schema_json);
+        }
+
+        return $this->summary($run) + ['checksum_total' => $run->checksum_total, 'schema_checksum' => $run->schema_checksum, 'filas_publicadas' => $rows, 'verificado' => $verified];
+    }
+
+    public function publication(int $year, int $month, int $user): array
+    {
+        return DB::transaction(function () use ($year, $month, $user) {
+            $period = DB::table('sync_periods')->where('anio', $year)->where('mes', $month)->first();
+            $result = ['anio' => $year, 'mes' => $month, 'active' => null, 'pending' => null];
+            foreach (['active' => 'active_run_id', 'pending' => 'pending_run_id'] as $key => $column) {
+                if ($period && $period->$column !== null) {
+                    $run = DB::table('sync_runs')->find($period->$column);
+                    if (! $run || (int) $run->user_id !== $user) {
+                        throw new SyncException('period_owner_conflict', 'El período requiere revisión del administrador de sincronización.', 409);
+                    }
+                    $result[$key] = $this->verification($run->uuid, $user);
+                }
+            }
+
+            return $result;
+        });
+    }
+
     public function start(array $input, int $user): array
     {
         $this->transactionalStorage();

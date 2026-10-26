@@ -10,6 +10,7 @@ import { Source } from './database/source.js';
 import { extract, upload, type RunPlan } from './services/sync.js';
 import { Api, HttpError } from './services/api.js';
 import { describeSourceError } from './utils/source-error.js';
+import { acquireLock } from './services/lock.js';
 
 process.chdir(join(dirname(fileURLToPath(import.meta.url)), '..'));
 // dist/index.js y src/index.ts comparten el mismo directorio padre client/.
@@ -53,7 +54,13 @@ async function main() {
     console.log(await upload(api, result.plan, result.folder));
   } finally { await source.close(); }
 }
-main().catch((error: unknown) => {
+async function lockedMain() {
+  // El estado es solo lectura; las extracciones y envíos manuales comparten exclusión con automatización.
+  if (process.argv.includes('--status')) return main();
+  const lock = await acquireLock(environmentSchema.parse(process.env).SYNC_LOCK_PORT);
+  try { return await main(); } finally { await lock.release(); }
+}
+lockedMain().catch((error: unknown) => {
   // No imprimir mensajes del driver ni cuerpos remotos: pueden contener valores o credenciales.
   const code = (error as { code?: string })?.code;
   const message = error instanceof Error && error.message.startsWith('Faltan las credenciales SQL:') ? error.message : error instanceof ZodError ? 'Parámetros o configuración inválidos; revise año, mes y .env.' :

@@ -40,6 +40,8 @@ El cliente exige HTTPS salvo localhost y rechaza redirecciones. El servidor exig
 
 ## Evidencia real obtenida
 
+La automatización añade un coordinador local con checkpoints durables, exclusión entre clientes y verificación remota de publicaciones. Reutiliza los servicios de extracción y publicación existentes. La ventana diaria considera las últimas 30 × 24 horas y todos sus meses completos según America/Lima. Los spools incompletos se reanudan por el UUID confirmado por Laravel; una extracción sin plan final se conserva y vuelve a extraerse con otro UUID. No se han ejecutado cargas automáticas reales. Ver [AUTOMATIZACION.md](AUTOMATIZACION.md) para estados, disco, renovación y despliegue.
+
 Conexión SQL autenticada a CASABLANCA y ejecución de septiembre 2026 verificadas: 35 354 filas leídas y conservadas, cero descartadas y 34 columnas. Se detectó certificado autofirmado; el usuario autorizó temporalmente confiar en él en la LAN, con cifrado activo. Los costos `CostoMPSoles`, `CostoMPUS$`, `CostoMP1Soles` y `CostoMP1US$` son FLOAT del origen; `Cantidad` y `HAS` son MONEY(19,4), y `Kardex` es NUMERIC(18,0). La migración de las 34 columnas está aplicada. La primera transferencia real fue confirmada por el usuario y completada: UUID `1eab833e-4cc8-473c-a90a-9cd35e744821`, 36 lotes y 35 354 filas activas. Su JSON coincide con staging y se contrastaron 247 478 campos numéricos estructurados con su JSON sin diferencias.
 
 ## Pendiente de evidencia real

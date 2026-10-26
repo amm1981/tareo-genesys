@@ -18,3 +18,6 @@ server/storage/app/private/source-schema.json
 server/storage/app/private/schema-test-*
 *.log
 artifacts/
+client/.automation/
+client/.secrets/
+client/tests/.auto-*/

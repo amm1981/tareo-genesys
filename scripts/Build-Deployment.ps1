@@ -54,7 +54,7 @@ if ($schemaHash -ne $expectedSchemaHash) { throw 'Cambio del esquema: revisar an
 foreach ($directory in @('server/app','server/config','server/routes','server/database/migrations','server/database/seeders','server/database/factories','server/public','deploy')) {
     Copy-ReleaseTree $directory
 }
-foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md','docs/API_CONSULTA.md')) {
+foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md','docs/API_CONSULTA.md','docs/AUTOMATIZACION.md')) {
     Copy-ReleaseFile $file $file
 }
 Copy-ReleaseFile 'deploy/production.env.example' 'server/.env.example'

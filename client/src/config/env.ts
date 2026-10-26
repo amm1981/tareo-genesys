@@ -19,6 +19,8 @@ export const environmentSchema = z.object({
       (url.protocol === 'https:' || (url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)));
   }, 'API_BASE_URL requiere HTTPS o HTTP de localhost, sin credenciales ni ruta.'),
   API_TOKEN: z.string().default(''),
+  API_TOKEN_FILE: z.string().default(''),
+  SYNC_LOCK_PORT: z.coerce.number().int().min(1024).max(65535).default(47831),
   BATCH_SIZE: z.coerce.number().int().min(1).max(1000).default(1000),
   MAX_BATCH_BYTES: z.coerce.number().int().min(1024).max(4194304).default(4194304),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(60000),

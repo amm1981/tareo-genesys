@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, open, rename } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import type { Period } from '../config/args.js';
@@ -10,10 +10,11 @@ export interface Extractor {
   extract(period: Period, onSchema: (manifest: Manifest) => void, onRow: (row: unknown[], manifest: Manifest) => Promise<void>): Promise<Manifest>;
 }
 export interface RunPlan { uuid: string; anio: number; mes: number | null; total_esperado: number; total_lotes: number; checksum_total: string; schema_json: string; schema_checksum: string; origen_total: number; descartados: number }
-export async function extract(source: Extractor, period: Period, env: Environment, dry: boolean, directory = '.runs') {
-  const uuid = randomUUID();
+export async function extract(source: Extractor, period: Period, env: Environment, dry: boolean, directory = '.runs', options: { uuid?: string; beforeWrite?: (bytes: number) => Promise<void> } = {}) {
+  const uuid = options.uuid ?? randomUUID();
+  if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(uuid)) throw new Error('UUID inválido.');
   const folder = join(directory, uuid);
-  if (!dry) await mkdir(folder, { recursive: true, mode: 0o700 });
+  if (!dry) { await mkdir(directory, { recursive: true, mode: 0o700 }); await mkdir(folder, { mode: 0o700 }); }
   let total = 0, discarded = 0, kept = 0, number = 0;
   let rows: WireRow[] = [];
   let rowBytes = 2;
@@ -23,7 +24,11 @@ export async function extract(source: Extractor, period: Period, env: Environmen
     const payload = JSON.stringify(rows);
     const batch: Batch = { numero_lote: ++number, payload, checksum: sha256(payload) };
     digest.update(`${number}:${batch.checksum}\n`);
-    await writeFile(join(folder, `${number}.json`), JSON.stringify(batch), { flag: 'wx', mode: 0o600 });
+    const content = JSON.stringify(batch);
+    await options.beforeWrite?.(Buffer.byteLength(content));
+    const handle = await open(join(folder, `${number}.tmp`), 'wx', 0o600);
+    try { await handle.writeFile(content); await handle.sync(); } finally { await handle.close(); }
+    await rename(join(folder, `${number}.tmp`), join(folder, `${number}.json`));
     rows = [];
     rowBytes = 2;
   };
@@ -48,7 +53,10 @@ export async function extract(source: Extractor, period: Period, env: Environmen
   if (!dry) {
     const approved = validateManifest(JSON.parse(await readFile(env.SQL_SCHEMA_FILE, 'utf8')));
     if (JSON.stringify(approved) !== schema_json) throw new Error('El esquema real no coincide con el esquema revisado. Ejecute inspect:schema y revise las migraciones.');
-    await writeFile(join(folder, 'plan.json'), JSON.stringify(plan), { flag: 'wx', mode: 0o600 });
+    await options.beforeWrite?.(Buffer.byteLength(JSON.stringify(plan)));
+    const handle = await open(join(folder, 'plan.tmp'), 'wx', 0o600);
+    try { await handle.writeFile(JSON.stringify(plan)); await handle.sync(); } finally { await handle.close(); }
+    await rename(join(folder, 'plan.tmp'), join(folder, 'plan.json'));
   }
   return { plan, manifest, folder };
 }

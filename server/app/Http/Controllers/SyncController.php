@@ -44,4 +44,16 @@ class SyncController extends Controller
     {
         return response()->json(['data' => $this->sync->summary($this->sync->find($uuid, $r->user()->id))]);
     }
+
+    public function verification(Request $r, string $uuid)
+    {
+        return response()->json(['data' => $this->sync->verification($uuid, $r->user()->id)]);
+    }
+
+    public function publication(Request $r)
+    {
+        $data = $r->validate(['anio' => 'required|integer|between:1900,9999', 'mes' => 'required|integer|between:1,12']);
+
+        return response()->json(['data' => $this->sync->publication((int) $data['anio'], (int) $data['mes'], $r->user()->id)]);
+    }
 }

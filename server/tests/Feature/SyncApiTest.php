@@ -78,6 +78,74 @@ class SyncApiTest extends TestCase
         })->count();
     }
 
+    public function test_automation_inspection_verifies_publication_counts_and_keeps_pending_separate(): void
+    {
+        $url = '/api/v1/sync/publication?anio=2026&mes=9';
+        $this->getJson($url)->assertOk()->assertJsonPath('data.active', null)->assertJsonPath('data.pending', null);
+        [$plan, $batches] = $this->plan([$this->row(), $this->row()]);
+        $this->send($plan, $batches);
+        $this->getJson($url)->assertOk()->assertJsonPath('data.active', null)->assertJsonPath('data.pending.uuid', $plan['uuid'])->assertJsonPath('data.pending.verificado', false);
+        $this->finish($plan)->assertOk();
+        $result = $this->getJson($url)->assertOk()->assertJsonPath('data.pending', null)
+            ->assertJsonPath('data.active.verificado', true)->assertJsonPath('data.active.filas_publicadas', 2)
+            ->assertJsonPath('data.active.checksum_total', $plan['checksum_total']);
+        $this->assertArrayNotHasKey('schema_json', $result->json('data.active'));
+        $this->getJson('/api/v1/sync/runs/'.$plan['uuid'].'/verification')->assertOk()->assertJsonPath('data.verificado', true);
+        DB::table('costos_agricolas')->limit(1)->delete();
+        $this->getJson($url)->assertOk()->assertJsonPath('data.active.verificado', false);
+    }
+
+    public function test_automation_inspection_detects_changed_batch_ledger(): void
+    {
+        [$plan, $batches] = $this->plan([$this->row()]);
+        $this->send($plan, $batches);
+        $this->finish($plan)->assertOk();
+        DB::table('sync_batches')->update(['checksum' => str_repeat('0', 64)]);
+        $this->getJson('/api/v1/sync/runs/'.$plan['uuid'].'/verification')->assertOk()->assertJsonPath('data.verificado', false);
+    }
+
+    public function test_rotation_revokes_only_the_chosen_sync_token_of_the_technical_account(): void
+    {
+        $technical = User::factory()->create(['email' => 'sync@get-genesys.invalid']);
+        $old = $technical->createToken('old', ['sync:write']);
+        $new = $technical->createToken('new', ['sync:write']);
+        $read = $technical->createToken('read', ['costs:read']);
+        $this->artisan('sync:revoke-token', ['id' => $old->accessToken->id])->assertSuccessful();
+        $this->assertDatabaseMissing('personal_access_tokens', ['id' => $old->accessToken->id]);
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $new->accessToken->id]);
+        $this->artisan('sync:revoke-token', ['id' => $read->accessToken->id])->assertFailed();
+        $this->assertDatabaseHas('personal_access_tokens', ['id' => $read->accessToken->id]);
+    }
+
+    public function test_inspection_is_owner_scoped_and_requires_sync_permission(): void
+    {
+        [$plan] = $this->plan();
+        $this->postJson('/api/v1/sync/runs', $plan)->assertOk();
+        $other = User::factory()->create();
+        $token = $other->createToken('other', ['sync:write'])->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/v1/sync/runs/'.$plan['uuid'].'/verification')->assertNotFound();
+        $this->getJson('/api/v1/sync/publication?anio=2026&mes=9')->assertConflict();
+        $read = $other->createToken('query', ['costs:read'])->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$read)->getJson('/api/v1/sync/publication?anio=2026&mes=9')->assertForbidden();
+    }
+
+    public function test_inspection_of_empty_and_annual_publications_and_invalid_period(): void
+    {
+        [$empty] = $this->plan();
+        $this->postJson('/api/v1/sync/runs', $empty)->assertOk();
+        $this->finish($empty)->assertOk();
+        $this->getJson('/api/v1/sync/publication?anio=2026&mes=9')->assertOk()->assertJsonPath('data.active.verificado', true)->assertJsonPath('data.active.filas_publicadas', 0);
+        [$annual, $batches] = $this->plan([$this->row(), $this->row('2026-10-01T00:00:00')], null);
+        $this->send($annual, $batches);
+        $this->finish($annual)->assertOk();
+        foreach ([1, 9, 10, 12] as $month) {
+            $this->getJson('/api/v1/sync/publication?anio=2026&mes='.$month)->assertOk()->assertJsonPath('data.active.uuid', $annual['uuid'])->assertJsonPath('data.active.verificado', true);
+        }
+        $this->getJson('/api/v1/sync/publication?anio=2026&mes=13')->assertUnprocessable();
+    }
+
     public function test_valid_bearer_token_and_health_with_minimal_information(): void
     {
         $this->getJson('/api/health')->assertExactJson(['data' => ['status' => 'ok']]);

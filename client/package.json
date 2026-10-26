@@ -7,6 +7,9 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "sync": "tsx src/index.ts",
+    "sync:backfill": "tsx src/auto.ts backfill",
+    "sync:daily": "tsx src/auto.ts daily",
+    "sync:retention": "tsx src/retention.ts",
     "check:connection": "tsx src/index.ts --check-connection",
     "diagnose:connection": "tsx scripts/diagnose-connection.ts",
     "inspect:schema": "tsx src/index.ts --inspect-schema",
