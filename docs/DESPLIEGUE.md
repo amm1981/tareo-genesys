@@ -1,5 +1,7 @@
 # Preparación de despliegue en VPS Ubuntu
 
+> Actualización 26/10/2026: toda nueva extracción usa exclusivamente **dbo.SPWConsumoMes (38 columnas)**. El esquema VF de 34 columnas queda registrado para consulta histórica. Antes de operar, seguir [la transición de fuente](CAMBIO_FUENTE.md). No reutilizar el checkpoint vacío anterior ni reconstruir históricos sin aprobación.
+
 Guía únicamente. **No se ejecutaron comandos en el VPS**. Antes de desplegar, obtener autorización e inventariar Ubuntu, Nginx, PHP-FPM/versiones/extensiones, vhosts, certificados, MySQL, aplicaciones existentes, usuarios, permisos, respaldos y topología de proxies. No reemplazar configuraciones globales de otros proyectos.
 
 Dominio confirmado por el usuario: **api.labour.agrocalera.app**. URL base de producción: `https://api.labour.agrocalera.app`. Endpoint inicial de comprobación: `https://api.labour.agrocalera.app/api/health`. La configuración local de WampServer y del cliente sigue activa hasta que el VPS esté preparado y verificado.
@@ -56,7 +58,7 @@ Después de comprobar HTTPS y `/api/health`, actualizar el `.env` del cliente co
 2. Instalar dependencias con `composer install --no-dev --prefer-dist --optimize-autoloader` y verificar plataforma.
 3. Crear `.env` privado. Generar APP_KEY solo en la instalación inicial; conservarla en futuras versiones. Asignar permisos mínimos a `storage` y `bootstrap/cache` para el usuario PHP-FPM, sin permisos 777.
 4. Revisar `php artisan migrate --pretend`; verificar tipos DECIMAL de la migración real y ejecutar migraciones aprobadas. Nunca `migrate:fresh` en producción.
-5. Copiar el mismo `source-schema.json` aprobado por el cliente (SHA-256 idéntico). Si se prepara el esquema en VPS, generar/revisar la migración antes de ejecutarla. No instalar el fixture de pruebas.
+5. Copiar el mismo `source-schema.json` aprobado por el cliente (SHA-256 idéntico). La migración incremental de esta versión ya está incluida: revisar su preview; no generar otra copia. No instalar el fixture de pruebas.
 6. Configurar el vhost con document root `server/public`, reescritura a `index.php`, FastCGI hacia el pool existente validado, denegación de archivos ocultos y TLS. Mantener MySQL y SQL Server fuera de Internet.
 7. Coordinar límites: `client_max_body_size` al menos 12 MiB; `post_max_size` al menos 12 MiB; timeouts PHP-FPM/Nginx suficientes para completar el mayor snapshot. Revisar `max_allowed_packet` y recursos de MySQL antes de cambiarlos. Ajustar `REQUEST_TIMEOUT_MS` del cliente dentro del límite admitido; la finalización es idempotente si la respuesta se pierde.
 8. Si hay proxy/CDN, configurar solo proxies confiables y verificar HTTPS efectivo; no confiar globalmente en `X-Forwarded-Proto` de cualquier IP.

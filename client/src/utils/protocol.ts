@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Decimal } from 'decimal.js';
 import type { Period } from '../config/args.js';
 import { isFloatCost, validateFloatCost } from './float-cost.js';
+import { CURRENT_PROCEDURE } from '../config/source.js';
 
 export const columnSchema = z.object({
   name: z.string().min(1).max(128),
@@ -10,7 +11,7 @@ export const columnSchema = z.object({
   nullable: z.boolean(), precision: z.number().int().min(1).max(38).nullable(),
   scale: z.number().int().min(0).max(38).nullable(), length: z.number().int().nullable(),
 });
-export const manifestSchema = z.object({ version: z.literal(1), database: z.literal('CASABLANCA'), procedure: z.literal('dbo.SPWConsumoMesVF'), columns: z.array(columnSchema).min(1).max(500) });
+export const manifestSchema = z.object({ version: z.literal(1), database: z.literal('CASABLANCA'), procedure: z.literal(CURRENT_PROCEDURE), columns: z.array(columnSchema).min(1).max(500) });
 export type Manifest = z.infer<typeof manifestSchema>;
 export type Column = Manifest['columns'][number];
 export type DataRow = Record<string, string | number | boolean | null>;

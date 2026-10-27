@@ -21,6 +21,7 @@ class CostQueryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config(['sync.schema_file' => base_path('../docs/source-schema.json')]);
         $this->owner = User::factory()->create();
         $this->consumer = User::factory()->create();
         $this->consumer->forceFill(['api_username' => 'erp', 'api_enabled' => true])->save();
@@ -86,7 +87,7 @@ class CostQueryTest extends TestCase
             ->assertJsonPath('data.0.datos.CostoMP1US$', null)
             ->assertJsonPath('data.0.datos.Fecha', '2026-09-01T12:30:00.1234567')
             ->assertJsonPath('data.0.datos.Concepto', '  á漢字 😀  ');
-        $this->assertCount(34, $response->json('data.0.datos'));
+        $this->assertCount(38, $response->json('data.0.datos'));
         $this->assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
     }
 

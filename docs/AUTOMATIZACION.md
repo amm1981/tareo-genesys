@@ -1,14 +1,16 @@
 # Automatización incremental de GET_Genesys
 
+> Actualización 26/10/2026: toda nueva extracción usa exclusivamente **dbo.SPWConsumoMes (38 columnas)**. El esquema VF de 34 columnas queda registrado para consulta histórica. Antes de operar, seguir [la transición de fuente](CAMBIO_FUENTE.md). No reutilizar el checkpoint vacío anterior ni reconstruir históricos sin aprobación.
+
 Implementación del 25 de octubre de 2026 (America/Lima), sobre el cambio de GitHub `3152d8b`, incorporado primero mediante fast-forward. Se mantuvo la carpeta de desarrollo existente por indicación del usuario. `C:\Apps\GET_Genesys` es la ruta propuesta para la instalación operativa de Windows; los scripts aceptan otra ruta explícita.
 
 Esta entrega prepara código, pruebas y definición de tarea. No ejecuta BACKFILL/DAILY reales, no cambia el VPS, no aplica migraciones en producción, no modifica contraseñas y no registra tareas. Las pruebas de automatización usan datos sintéticos, directorios temporales y HTTP de loopback. Las definiciones de Task Scheduler se validan en memoria.
 
 ## Arquitectura reutilizada
 
-`Source` conserva la conexión a CASABLANCA, verifica `DB_NAME()` y ejecuta únicamente `dbo.SPWConsumoMesVF` con parámetros tipados. El motor automático exige además `192.168.136.3:1433`. Usa `extract()` y sus mismos serializadores, filtro sobre la `Fecha` real, esquema aprobado de 34 columnas y decodificador TDS exacto. No cambia el SP ni consulta otras bases.
+`Source` conserva la conexión a CASABLANCA, verifica `DB_NAME()` y ejecuta únicamente `dbo.SPWConsumoMes` con parámetros tipados. El motor automático exige además `192.168.136.3:1433`. Usa `extract()` y sus mismos serializadores, filtro sobre la `Fecha` real, esquema aprobado de 38 columnas y decodificador TDS exacto. No cambia el SP ni consulta otras bases.
 
-El nuevo runner prepara los mismos lotes y manifiesto que el cliente manual. Comprueba integridad local antes del primer envío y reanuda desde el progreso confirmado por Laravel. Se conserva la transacción InnoDB de publicación de `SyncService`: completar cambia el snapshot activo; un error deja vigente el anterior. No se recalculan costos, no se mezclan operaciones y no se convierten NUMERIC/MONEY a float. Los cuatro costos FLOAT mantienen el tratamiento aproximado del origen ya documentado.
+El nuevo runner prepara los mismos lotes y manifiesto que el cliente manual. Comprueba integridad local antes del primer envío y reanuda desde el progreso confirmado por Laravel. Se conserva la transacción InnoDB de publicación de `SyncService`: completar cambia el snapshot activo; un error deja vigente el anterior. No se recalculan costos, no se mezclan operaciones y no se convierten NUMERIC/MONEY a float. Los ocho costos FLOAT de la fuente definitiva mantienen el tratamiento aproximado del origen ya documentado.
 
 Las rutas de terceros `/api/v1/auth/*` y `/api/v1/costos*` conservan su contrato. Se agregan únicamente rutas de inspección con permiso exclusivo `sync:write`:
 
@@ -37,7 +39,7 @@ Una nueva fecha local permite una nueva versión por mes. Un reinicio dentro de 
 
 ## Recuperación y exclusión
 
-Los checkpoints en `client/.automation/state.json` registran UUID, modo, ciclo, período, estado, cantidades esperadas, lotes y hashes. Se escriben a un temporal, se sincronizan a disco y se reemplazan mediante rename. Los lotes se sincronizan antes de renombrarse; `plan.json` es el marcador final de una extracción completa.
+Los checkpoints en `client/.automation/spwconsumomes-v1/state.json` registran UUID, modo, ciclo, período, estado, cantidades esperadas, lotes y hashes. Se escriben a un temporal, se sincronizan a disco y se reemplazan mediante rename. Los lotes se sincronizan antes de renombrarse; `plan.json` es el marcador final de una extracción completa.
 
 Estados: `extracting`, `prepared`, `uploading`, `empty_blocked`, `verified`, `abandoned`.
 
@@ -54,7 +56,7 @@ Manual y automático comparten un bloqueo del SO mediante un listener exclusivo 
 
 Un resultado vacío automático se conserva como `empty_blocked` y no inicia una ejecución en Laravel, incluso en BACKFILL. Así no reemplaza datos anteriores por una extracción vacía inesperada.
 
-Si el administrador verifica que un vacío es correcto, puede autorizar **ese UUID concreto** en `client/.automation/empty-approvals.json`:
+Si el administrador verifica que un vacío es correcto, puede autorizar **ese UUID concreto** en `client/.automation/spwconsumomes-v1/empty-approvals.json`:
 
 ```json
 {"uuids":["UUID_REVISADO_DE_LA_EXTRACCION_VACIA"]}
@@ -114,7 +116,7 @@ La cuenta dedicada requiere inicio de sesión por lotes, acceso de red LAN/VPN a
 
 Después de revisión y autorización, el administrador puede importar **el XML revisado** mediante Task Scheduler, indicando la contraseña en la interfaz segura, o generar una nueva definición con `-Install` y un `-OutputPath` nuevo. El switch solicita `Get-Credential`, rechaza una tarea existente y registra sin iniciar inmediatamente. No se utilizó `-Install` en esta entrega.
 
-El wrapper registra fecha UTC, modo, resultado y códigos sanitizados en `.automation/task-YYYYMM.jsonl`. El runner registra eventos por UUID/período/cantidades en `.automation/events-YYYY-MM.jsonl`; no copia mensajes arbitrarios del driver ni cuerpo de solicitudes. El siguiente inicio recupera el pendiente antes de calcular trabajo nuevo. BACKFILL se inicia aparte; no se agenda la carga masiva con la tarea diaria.
+El wrapper registra fecha UTC, modo, resultado y códigos sanitizados en `.automation/spwconsumomes-v1/task-YYYYMM.jsonl`. El runner registra eventos por UUID/período/cantidades en `.automation/spwconsumomes-v1/events-YYYY-MM.jsonl`; no copia mensajes arbitrarios del driver ni cuerpo de solicitudes. El siguiente inicio recupera el pendiente antes de calcular trabajo nuevo. BACKFILL se inicia aparte; no se agenda la carga masiva con la tarea diaria.
 
 ## Pruebas reproducibles, sin carga real
 
@@ -134,7 +136,7 @@ Set-Location ..
 
 El test PowerShell crea fixtures sintéticos bajo artifacts/, valida el XML con Task Scheduler en memoria y prueba un Node ficticio con salida 7 mediante Windows PowerShell sin interacción. No registra tareas, no toca la credencial real, no consulta SQL y no llama al VPS. Los fixtures quedan para revisión en artifacts/.
 
-Resultados de esta entrega: build correcto, **46 Vitest**, **51 PHPUnit (312 aserciones)** y pruebas PowerShell correctas. La prueba adicional optativa `php tests/mysql-smoke.php`, que usa solo tablas temporales y esquema sintético privado, no pudo completarse el 25/10 porque MySQL local en `127.0.0.1:3306` rechazó la conexión. No se arrancaron servicios. Repetirla con MySQL local disponible antes del despliegue; informa fallo con código 1 sin volcar SQL ni valores. La integración de esta entrega que sí pasó incluye el runner con HTTP real de loopback, filesystem/checkpoints y simulación del servidor; PHPUnit utiliza SQLite en memoria.
+Resultados de esta entrega: build correcto, **50 Vitest**, **57 PHPUnit (398 aserciones)** y pruebas PowerShell correctas. La prueba adicional optativa `php tests/mysql-smoke.php`, que usa solo tablas temporales y esquema sintético privado, no pudo completarse el 25/10 porque MySQL local en `127.0.0.1:3306` rechazó la conexión. No se arrancaron servicios. Repetirla con MySQL local disponible antes del despliegue; informa fallo con código 1 sin volcar SQL ni valores. La integración de esta entrega que sí pasó incluye el runner con HTTP real de loopback, filesystem/checkpoints y simulación del servidor; PHPUnit utiliza SQLite en memoria.
 
 ## Plan de despliegue por etapas
 

@@ -1,0 +1,126 @@
+{
+  "inspection_date_lima": "2026-10-26",
+  "database": "CASABLANCA",
+  "procedure": "dbo.SPWConsumoMes",
+  "parameters": {
+    "anio": 2026,
+    "mes": 10
+  },
+  "columns": 38,
+  "schema_sha256": "fccdf733fd8125cbbd3ed54179713ec18f0305c775f2bf7646692218f4eb48f9",
+  "rows_read": 19820,
+  "rows_kept": 19490,
+  "rows_discarded": 330,
+  "published": false,
+  "stored_rows": false,
+  "differences": [
+    {
+      "name": "UGDet",
+      "change": "metadata",
+      "before": {
+        "name": "UGDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 121
+      },
+      "after": {
+        "name": "UGDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 113
+      }
+    },
+    {
+      "name": "CCDet",
+      "change": "metadata",
+      "before": {
+        "name": "CCDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 121
+      },
+      "after": {
+        "name": "CCDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 113
+      }
+    },
+    {
+      "name": "UPDet",
+      "change": "metadata",
+      "before": {
+        "name": "UPDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 121
+      },
+      "after": {
+        "name": "UPDet",
+        "type": "VarChar",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 113
+      }
+    },
+    {
+      "name": "CostoHASSoles",
+      "change": "added",
+      "metadata": {
+        "name": "CostoHASSoles",
+        "type": "Float",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 8
+      }
+    },
+    {
+      "name": "CostoHASUS$",
+      "change": "added",
+      "metadata": {
+        "name": "CostoHASUS$",
+        "type": "Float",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 8
+      }
+    },
+    {
+      "name": "CostoHAS1Soles",
+      "change": "added",
+      "metadata": {
+        "name": "CostoHAS1Soles",
+        "type": "Float",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 8
+      }
+    },
+    {
+      "name": "CostoHAS1US$",
+      "change": "added",
+      "metadata": {
+        "name": "CostoHAS1US$",
+        "type": "Float",
+        "nullable": true,
+        "precision": null,
+        "scale": null,
+        "length": 8
+      }
+    }
+  ]
+}

@@ -18,6 +18,10 @@ if (DB::getDriverName() !== 'mysql' || DB::getDatabaseName() !== 'get_genesys' |
     throw new RuntimeException('Esta prueba requiere exclusivamente get_genesys en MySQL local y APP_ENV=local.');
 }
 $fixture = json_decode(file_get_contents(__DIR__.'/../../client/.runs/protocol-fixture.json'), true, 512, JSON_THROW_ON_ERROR);
+if (json_decode($fixture['plan']['schema_json'], true)['procedure'] !== SourceSchema::CURRENT) {
+    fwrite(STDERR, "Regenerar el fixture sintético con client/scripts/export-fixture.ts de esta versión.\n");
+    exit(1);
+}
 $tables = ['users', 'personal_access_tokens', 'sync_runs', 'sync_periods', 'sync_batches', 'staging_costos', 'costos_agricolas'];
 $created = [];
 $failed = false;
@@ -36,6 +40,7 @@ try {
     fwrite($schemaHandle, $fixture['plan']['schema_json']);
     fclose($schemaHandle);
     config(['sync.schema_file' => $fixtureSchema]);
+    config(['sync.expected_columns' => count(json_decode($fixture['plan']['schema_json'], true)['columns'])]);
     foreach ($tables as $table) {
         $definition = (array) DB::selectOne("SHOW CREATE TABLE `$table`");
         $sql = str_replace('CREATE TABLE', 'CREATE TEMPORARY TABLE', $definition['Create Table']);

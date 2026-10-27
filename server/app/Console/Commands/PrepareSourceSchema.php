@@ -23,6 +23,16 @@ class PrepareSourceSchema extends Command
         }
         $json = file_get_contents($path);
         $schema = $source->parse($json);
+        if ($schema['procedure'] !== SourceSchema::CURRENT) {
+            $this->error('La fuente histórica es de solo lectura.');
+
+            return self::FAILURE;
+        }
+        if (count($schema['columns']) !== config('sync.expected_columns')) {
+            $this->error('Inspeccionar el esquema completo de 38 columnas.');
+
+            return self::FAILURE;
+        }
         $names = ['id', 'sync_run_id', 'numero_fila', 'anio', 'mes', 'fecha', 'datos_json', 'created_at'];
         $lines = [];
         foreach ($schema['columns'] as $c) {
@@ -34,9 +44,14 @@ class PrepareSourceSchema extends Command
             }
             $names[] = mb_strtolower($name);
             if (Schema::hasColumn('costos_agricolas', $name)) {
-                $this->error('Una columna ya existe: revise manualmente su tipo; no se sobrescribe.');
+                $stored = array_column(Schema::getColumns('costos_agricolas'), null, 'name')[$name];
+                if (! $source->compatibleExisting($c, $stored)) {
+                    $this->error('Columna existente incompatible; requiere revisión sin alterar sus datos.');
 
-                return self::FAILURE;
+                    return self::FAILURE;
+                }
+
+                continue;
             }
             $n = var_export($name, true);
             $dimension = in_array($c['name'], ['Operacion', 'TablaOrigen'], true) && in_array($c['type'], ['VarChar', 'NVarChar'], true) && $c['length'] > 0 && $c['length'] <= 191;
@@ -52,8 +67,18 @@ class PrepareSourceSchema extends Command
                 $lines[] = '            $t->index([\'sync_run_id\', '.$n.', \'fecha\'], '.var_export('idx_source_'.strtolower($c['name']), true).');';
             }
         }
-        if (file_exists(config('sync.schema_file'))) {
-            $this->error('Ya existe un esquema aprobado. Evolución de esquema requiere una migración revisada; consérvelo.');
+        if ($lines === []) {
+            $this->info('No faltan columnas; revise aprobación del esquema por separado.');
+
+            return self::SUCCESS;
+        }
+        if (is_file(resource_path('schemas/spwconsumomes.v1.json')) && hash_equals(hash_file('sha256', resource_path('schemas/spwconsumomes.v1.json')), hash('sha256', $json))) {
+            $this->error('La migración incremental ya está incluida en el repositorio. Revisar migrate --pretend; no generar otra copia.');
+
+            return self::FAILURE;
+        }
+        if (file_exists(config('sync.schema_file')) && file_get_contents(config('sync.schema_file')) !== $json) {
+            $this->error('Existe otro esquema: conservarlo y configurar una ruta nueva para el esquema actual.');
 
             return self::FAILURE;
         }

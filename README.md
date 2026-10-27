@@ -1,5 +1,7 @@
 # tareo-genesys
 
+> Actualización 26/10/2026: toda nueva extracción usa exclusivamente **dbo.SPWConsumoMes (38 columnas)**. El esquema VF de 34 columnas queda registrado para consulta histórica. Antes de operar, seguir [la transición de fuente](docs/CAMBIO_FUENTE.md). No reutilizar el checkpoint vacío anterior ni reconstruir históricos sin aprobación.
+
 Proyecto **GET_Genesys**. SQL Server **CASABLANCA** → cliente Node.js/TypeScript → API Laravel 12 con Sanctum → MySQL 8. Conserva el envío manual y agrega automatización BACKFILL/DAILY preparada para Windows Task Scheduler. Sin frontend, Docker ni cron. La automatización todavía no se ha activado ni se ha ejecutado la carga masiva. El nombre del proyecto no identifica la base de origen.
 
 ## Estado verificado del desarrollo
@@ -13,12 +15,12 @@ Comprobaciones locales actualizadas al 25 de octubre de 2026, hora de Lima. La t
 | MySQL | 8.4.7, `127.0.0.1:3306`, conexión correcta; `get_genesys` creada y migrada |
 | SQL Server | Conexión SQL autenticada y `DB_NAME() = CASABLANCA` verificados |
 | TLS SQL | Certificado autofirmado (`DEPTH_ZERO_SELF_SIGNED_CERT`); excepción temporal autorizada por el usuario: cifrado activo y `SQL_TRUST_SERVER_CERTIFICATE=true` solo en `.env` local |
-| Esquema y SP reales | 34 columnas inspeccionadas, esquema guardado y migración aplicada en MySQL local |
+| Esquema y SP reales | Histórico VF: 34 columnas. Fuente definitiva: 38 columnas inspeccionadas el 26/10; migración incremental preparada, no aplicada a MySQL real |
 | Dry-run septiembre 2026 | Correcto: 35 354 filas leídas, 35 354 conservadas, 0 descartadas; sin envío a API |
 | API por HTTP local | Salud 200; token inválido 401; token local válido accede al estado y recibe 404 para un UUID inexistente |
 | Primera transferencia real | UUID `1eab833e-4cc8-473c-a90a-9cd35e744821`, completada: 35 354/35 354 filas y 36/36 lotes; snapshot activo de septiembre 2026 verificado |
 | Verificación posterior | 35 354 filas activas del 1 al 30 de septiembre; JSON idéntico a staging y 247 478 campos numéricos comparados sin diferencias |
-| Pruebas | 46 Vitest, 51 PHPUnit; automatización con HTTP local y checkpoints sintéticos, pruebas manuales existentes y API de terceros |
+| Pruebas | 50 Vitest, 57 PHPUnit; automatización con HTTP local y checkpoints sintéticos, pruebas manuales existentes y API de terceros |
 | PHP de producción elegido | Ubuntu 24.04 LTS, paquete PHP `8.3.6-0ubuntu0.24.04.13`; dependencias resueltas con plataforma Composer `8.3.6` |
 | Consulta para sistemas externos | Login JSON usuario/contraseña, Bearer `costs:read`, revocación y consulta mensual paginada de publicaciones; ver [API_CONSULTA.md](docs/API_CONSULTA.md) |
 | Automatización preparada | BACKFILL desde enero 2023, DAILY de 30 fechas Lima, recuperación por UUID, bloqueo, guardas de disco/vacíos y XML de tarea; ver [AUTOMATIZACION.md](docs/AUTOMATIZACION.md) |
@@ -30,7 +32,7 @@ El desarrollo está implementado y la primera transferencia real ya está public
 - Windows con PowerShell; Node.js 22.12+ o 24 LTS compatible con las dependencias fijadas.
 - PHP de producción: **8.3.6, paquete Ubuntu `8.3.6-0ubuntu0.24.04.13`**, en Ubuntu 24.04 LTS. Composer 2 y extensiones PDO MySQL, mbstring, openssl, bcmath, curl, DOM, XML y fileinfo. SQLite/PDO SQLite para pruebas. El lock está resuelto para PHP 8.3.6; no exige PHP 8.4. La revisión `.13` es de Ubuntu y se verifica con `dpkg-query`, no con la versión upstream que muestra `php -v`.
 - WampServer con MySQL 8 en desarrollo. No cambiar globalmente el PHP de otros proyectos. Para servir peticiones en Windows usar una compilación con parches vigentes, por ejemplo PHP 8.3.36 o una actualización posterior de esa rama; el paquete `.13` de Ubuntu no es un binario para Windows. Las versiones locales detectadas al inicio figuran en la tabla como inventario, no como recomendación de seguridad.
-- Acceso LAN/VPN al SQL Server, usuario de lectura y ejecución de `dbo.SPWConsumoMesVF`, y CA/nombre TLS válidos. El SP debe ser validado por el DBA como de solo lectura; el cliente no cambia su definición ni crea objetos en SQL Server.
+- Acceso LAN/VPN al SQL Server, usuario de lectura y ejecución de `dbo.SPWConsumoMes`, y CA/nombre TLS válidos. El SP debe ser validado por el DBA como de solo lectura; el cliente no cambia su definición ni crea objetos en SQL Server.
 
 ## 2. Dependencias y configuración
 
@@ -141,14 +143,14 @@ npm run sync -- --anio 2026 --mes 9 --dry-run
 npm run inspect:schema -- --anio 2026 --mes 9
 ```
 
-La inspección **ejecuta el SP de lectura y recorre su resultado**, usando la misma validación que dry-run. Guarda solo metadatos en `client/schema.actual.json`; no guarda filas ni envía a Laravel. El archivo existente no se sobrescribe si difiere. Para una nueva versión, configure otra `SQL_SCHEMA_FILE` y conserve la anterior.
+La inspección **ejecuta el SP de lectura y recorre su resultado**, usando la misma validación que dry-run. Guarda solo metadatos en `client/schema.spwconsumomes.json`; no guarda filas ni envía a Laravel. El archivo existente no se sobrescribe si difiere. Para una nueva versión, configure otra `SQL_SCHEMA_FILE` y conserve la anterior.
 
 Dry-run muestra nombres/tipos de columnas y los conteos de filas leídas, conservadas y descartadas. Nunca muestra trabajadores ni valores de filas. Se filtra por la `Fecha` mostrada, con año exacto y mes exacto. Fechas nulas/ambiguas, columnas duplicadas, múltiples resultsets o tipos no soportados detienen el proceso. No se recalculan costos ni se suman operaciones/columnas.
 
 En SSMS, conectado **únicamente a CASABLANCA**, compare primero los resultados originales:
 
 ```sql
-EXEC dbo.SPWConsumoMesVF @Año = 2026, @Mes = 9;
+EXEC dbo.SPWConsumoMes @Año = 2026, @Mes = 9;
 ```
 
 Compare el total del resultado original con `leidos` y el total filtrado por **Fecha de septiembre 2026** con `conservados`. Revise los importes por columna/operación con valores exactos; no sumar columnas duplicadas ni producción con soles. Los totales monetarios de referencia dependen de las columnas reales y deben definirse después de inspeccionarlas. El SP puede incluir años posteriores por su condición `YEAR(Fecha) >= @Año`.
@@ -159,16 +161,15 @@ Después de revisar el esquema real:
 
 ```powershell
 Set-Location 'C:\Users\AlonsoMendoza\Documents\Proyectos\GET_Genesys\server'
-php artisan sync:schema:prepare ..\client\schema.actual.json
-# Revisar el archivo de migración generado antes de ejecutarlo:
-php artisan migrate
+php artisan migrate --pretend
+# Revisar la incremental incluida; aplicar solo tras respaldo y autorización.
 ```
 
-Para una instalación nueva de esta versión, el repositorio ya incluye la migración de las 34 columnas observadas y una copia de sus metadatos en `docs/source-schema.json`. Ejecute las migraciones y copie ese archivo a `client/schema.actual.json` y `server/storage/app/private/source-schema.json` si todavía no existen. El esquema observado en cada extracción debe seguir coincidiendo; nunca sobrescriba un esquema distinto ni ejecute de nuevo `sync:schema:prepare` sobre columnas ya instaladas.
+Para una instalación nueva de esta versión, el repositorio ya incluye las migraciones históricas de 34 columnas y la incremental de cuatro campos, con los metadatos actuales en `docs/source-schema.json`. Ejecute las migraciones y copie ese archivo a `client/schema.spwconsumomes.json` y `server/storage/app/private/source-schema-spwconsumomes-v1.json` si todavía no existen. El esquema observado en cada extracción debe seguir coincidiendo; nunca sobrescriba un esquema distinto ni ejecute de nuevo `sync:schema:prepare` sobre columnas ya instaladas.
 
 El comando genera una migración Laravel; no cambia tablas por sí mismo. La migración del esquema observado **ya está aplicada en esta instalación**; no volver a prepararla. Agrega columnas con los nombres reales del SP y `DECIMAL(p,s)` de sus metadatos para cada decimal/numeric/money, sin mezclar valores. Las cuatro columnas FLOAT de costos observadas usan el almacenamiento validado descrito abajo. Conserva strings sin truncarlos. MySQL no diferencia `Fecha`/`fecha` ni `Mes`/`mes`: los valores derivados de la fecha filtrada quedan en `fecha`/`mes`, y los valores originales se conservan completos en `fecha_origen`/`mes_origen` y el JSON. Las fechas de origen se guardan como texto ISO para preservar 7 cifras fraccionarias y offsets. Se admiten los nombres reales con `$`. Otras colisiones con campos técnicos requieren mapeo explícito; las columnas existentes nunca se sobrescriben.
 
-El esquema aprobado queda en `server/storage/app/private/source-schema.json`. En VPS debe ser el **mismo archivo byte por byte** que el cliente; sus SHA-256 deben coincidir. No cambie precision/scale a mano. La API rechaza columnas sin migrar y esquemas no aprobados. La evolución del SP requiere revisar un nuevo esquema y una migración específica.
+El esquema aprobado queda en `server/storage/app/private/source-schema-spwconsumomes-v1.json`. En VPS debe ser el **mismo archivo byte por byte** que el cliente; sus SHA-256 deben coincidir. No cambie precision/scale a mano. La API rechaza columnas sin migrar y esquemas no aprobados. La evolución del SP requiere revisar un nuevo esquema y una migración específica.
 
 `mssql` usa tedious 20.3.8 fijado. Su decodificador habitual devuelve decimales y money como `Number`, lo que puede perder cifras. `client/src/database/exact-tds.ts` intercepta la decodificación TDS en memoria antes de esa conversión y utiliza `BigInt` para producir strings exactos con escala, incluidos money de cuatro decimales. No modifica el driver instalado, SQL Server ni el SP. Se validan longitudes/buffers fragmentados y se bloquea una versión distinta del driver. `decimal.js` valida sin hacer totales en float. Este acceso a una API interna requiere revisar las pruebas al actualizar tedious. Si el SP devuelve costos como float/real, se conserva ese valor aproximado del origen; no se afirma precisión decimal que el SP no proporciona.
 

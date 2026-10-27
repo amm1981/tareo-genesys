@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mkdtemp, readFile, writeFile, rm, readdir } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile, rm, readdir, mkdir } from 'node:fs/promises';
 import { resolve, join, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -14,6 +14,9 @@ import { retainLocal } from '../src/automation/retention.js';
 import { type SyncApi, type Verification } from '../src/automation/transfer.js';
 import { validateManifest, sha256 } from '../src/utils/protocol.js';
 import type { RunPlan } from '../src/services/sync.js';
+import { extract } from '../src/services/sync.js';
+import { transition } from '../src/automation/transition.js';
+import { LEGACY_BLOCKED_UUID } from '../src/config/source.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -97,7 +100,7 @@ async function harness() {
   }));
   const events: object[] = [];
   const base = { root, env, api: backend, source, mode: 'backfill' as const, now: () => new Date('2023-01-15T07:00:00Z'), space: vi.fn(async (_n?: number) => {}), output: (e: object) => events.push(e) };
-  const state = async () => JSON.parse(await readFile(join(root, '.automation/state.json'), 'utf8')) as State;
+  const state = async () => JSON.parse(await readFile(join(root, '.automation/spwconsumomes-v1/state.json'), 'utf8')) as State;
   return { ...base, base, backend, state, connections, events, setEmpty: () => { empty = true; }, failConnect: (value: boolean) => { failConnect = value; } };
 }
 
@@ -129,7 +132,7 @@ describe('automatizacion con spool y checkpoints reales', () => {
     expect(h.connections).toHaveBeenCalledTimes(1);
     const record = Object.values(state.records)[0]!;
     expect(record).toMatchObject({ status: 'verified', total_esperado: 2, total_lotes: 2 });
-    const batch = JSON.parse(await readFile(join(h.root, '.runs', record.uuid, '1.json'), 'utf8'));
+    const batch = JSON.parse(await readFile(join(h.root, '.runs', 'spwconsumomes-v1', record.uuid, '1.json'), 'utf8'));
     expect(JSON.parse(JSON.parse(batch.payload)[0].datos_json).Cantidad).toBe('123456789012345.6789');
     await runAutomatic(h.base);
     expect(h.connections).toHaveBeenCalledTimes(1); expect(h.backend.runs.size).toBe(1);
@@ -153,7 +156,7 @@ describe('automatizacion con spool y checkpoints reales', () => {
   it('recupera el plan durable aunque el estado todavia diga extracting', async () => {
     const h = await harness(); const state = await runAutomatic(h.base);
     const record = Object.values(state.records)[0]!; record.status = 'extracting'; state.pending = record.uuid;
-    await writeFile(join(h.root, '.automation/state.json'), JSON.stringify(state));
+    await writeFile(join(h.root, '.automation/spwconsumomes-v1/state.json'), JSON.stringify(state));
     await runAutomatic(h.base);
     expect(h.connections).toHaveBeenCalledTimes(1);
     expect(h.backend.calls.filter(path => path.endsWith('/complete'))).toHaveLength(1);
@@ -172,7 +175,7 @@ describe('automatizacion con spool y checkpoints reales', () => {
     expect(h.backend.runs.size).toBe(0);
     const state = await h.state(); const uuid = state.pending!;
     await expect(runAutomatic(h.base)).rejects.toThrow('EMPTY_RESULT');
-    await writeFile(join(h.root, '.automation/empty-approvals.json'), JSON.stringify({ uuids: [uuid] }));
+    await writeFile(join(h.root, '.automation/spwconsumomes-v1/empty-approvals.json'), JSON.stringify({ uuids: [uuid] }));
     await runAutomatic(h.base);
     expect(h.backend.receipt(uuid)).toMatchObject({ total_esperado: 0, verificado: true });
   });
@@ -189,8 +192,8 @@ describe('automatizacion con spool y checkpoints reales', () => {
     const uuid = (await h.state()).pending!;
     h.failConnect(false); await runAutomatic(h.base);
     expect((await h.state()).records[uuid]!.status).toBe('abandoned');
-    const logs = (await readdir(join(h.root, '.automation'))).filter(x => x.endsWith('.jsonl'));
-    for (const file of logs) expect(await readFile(join(h.root, '.automation', file), 'utf8')).not.toContain('SENSITIVE_FIXTURE_PASSWORD_TOKEN');
+    const logs = (await readdir(join(h.root, '.automation', 'spwconsumomes-v1'))).filter(x => x.endsWith('.jsonl'));
+    for (const file of logs) expect(await readFile(join(h.root, '.automation', 'spwconsumomes-v1', file), 'utf8')).not.toContain('SENSITIVE_FIXTURE_PASSWORD_TOKEN');
   });
   it('DAILY repite meses completos una vez por fecha local y conserva su historial', async () => {
     const h = await harness();
@@ -205,7 +208,7 @@ describe('automatizacion con spool y checkpoints reales', () => {
     await expect(runAutomatic(h.base)).rejects.toThrow();
     await expect(runAutomatic({ ...h.base, env: { ...h.env, API_BASE_URL: 'https://other.invalid' } })).rejects.toThrow('MISMATCH');
     const id = (await h.state()).pending!;
-    await writeFile(join(h.root, '.runs', id, '2.json'), '{}');
+    await writeFile(join(h.root, '.runs', 'spwconsumomes-v1', id, '2.json'), '{}');
     await expect(runAutomatic(h.base)).rejects.toThrow();
     expect(h.backend.receipt(id).lotes_recibidos).toBe(1);
   });
@@ -227,17 +230,17 @@ describe('automatizacion con spool y checkpoints reales', () => {
     const store = new Store(h.root, state.binding);
     const now = new Date('2023-02-15T07:00:00Z');
     expect(await retainLocal(h.root, state, store, now, 14, false)).toHaveLength(1);
-    expect(await readFile(join(h.root, '.runs', record.uuid, 'plan.json'), 'utf8')).toContain(record.uuid);
+    expect(await readFile(join(h.root, '.runs', 'spwconsumomes-v1', record.uuid, 'plan.json'), 'utf8')).toContain(record.uuid);
     await retainLocal(h.root, state, store, now, 14, true, h.backend);
-    await expect(readFile(join(h.root, '.runs', record.uuid, 'plan.json'))).rejects.toThrow();
+    await expect(readFile(join(h.root, '.runs', 'spwconsumomes-v1', record.uuid, 'plan.json'))).rejects.toThrow();
     expect(h.backend.receipt(record.uuid).verificado).toBe(true);
   });
   it('retencion protege archivos desconocidos y respaldos locales', async () => {
     const h = await harness(); const state = await runAutomatic(h.base);
     const record = Object.values(state.records)[0]!;
-    await writeFile(join(h.root, '.runs', record.uuid, 'backup.bak'), 'synthetic');
+    await writeFile(join(h.root, '.runs', 'spwconsumomes-v1', record.uuid, 'backup.bak'), 'synthetic');
     await expect(retainLocal(h.root, state, new Store(h.root, state.binding), new Date('2023-03-01'), 14, true, h.backend)).rejects.toThrow('UNKNOWN_FILES');
-    expect(await readFile(join(h.root, '.runs', record.uuid, 'backup.bak'), 'utf8')).toBe('synthetic');
+    expect(await readFile(join(h.root, '.runs', 'spwconsumomes-v1', record.uuid, 'backup.bak'), 'utf8')).toBe('synthetic');
   });
 });
 describe('infraestructura y transporte', () => {
@@ -287,5 +290,58 @@ describe('infraestructura y transporte', () => {
       await runAutomatic({ ...h.base, env, api: new Api(env) });
       expect(Object.values((await h.state()).records)[0]!.status).toBe('verified');
     } finally { await new Promise<void>((resolve, reject) => server.close(e => e ? reject(e) : resolve())); }
+  });
+});
+
+describe('transicion definitiva de fuente', () => {
+  async function legacyState(h: Awaited<ReturnType<typeof harness>>) {
+    const schema = await readFile('../docs/schemas/spwconsumomesvf.v1.json', 'utf8');
+    const binding = sha256(JSON.stringify([h.env.API_BASE_URL, h.env.SQL_SERVER, h.env.SQL_PORT, 'CASABLANCA', 'dbo.SPWConsumoMesVF', sha256(schema)]));
+    const record = { uuid: LEGACY_BLOCKED_UUID, anio: 2026, mes: 10, mode: 'backfill', cycle: '2026-10-25', status: 'empty_blocked', updated_at: '2026-10-25T07:00:00.000Z', total_esperado: 0, total_lotes: 0 };
+    const text = JSON.stringify({ version: 1, binding, pending: record.uuid, records: { [record.uuid]: record }, daily: {} }, null, 2);
+    await mkdir(join(h.root, '.automation'), { recursive: true });
+    await writeFile(join(h.root, '.automation/state.json'), text);
+    const folder = join(h.root, '.runs', record.uuid); await mkdir(folder, { recursive: true });
+    await writeFile(join(folder, 'plan.json'), JSON.stringify({ uuid: record.uuid, anio: 2026, mes: 10, total_esperado: 0, total_lotes: 0, checksum_total: sha256(''), schema_json: schema, schema_checksum: sha256(schema), origen_total: 0, descartados: 0 }));
+    return text;
+  }
+  it('conserva bytes de estado y vacio antiguo; requiere validacion antes de crear el estado independiente', async () => {
+    const h = await harness(); const old = await legacyState(h);
+    await expect(runAutomatic(h.base)).rejects.toThrow('SOURCE_TRANSITION_REQUIRED');
+    const planned = await transition(h.root, h.env);
+    expect(planned.apply).toBe(false); expect(h.source).not.toHaveBeenCalled();
+    expect(await readFile(join(h.root, '.automation/state.json'), 'utf8')).toBe(old);
+    await transition(h.root, h.env, true);
+    const state = await runAutomatic(h.base);
+    expect(state.records[LEGACY_BLOCKED_UUID]).toBeUndefined();
+    expect(Object.keys(state.records)).toHaveLength(1);
+    expect(await readFile(join(h.root, '.automation/state.json'), 'utf8')).toBe(old);
+    expect(await readFile(join(h.root, '.automation/spwconsumomes-v1/legacy-state.snapshot.json'), 'utf8')).toBe(old);
+    expect(JSON.parse(await readFile(join(h.root, '.runs', LEGACY_BLOCKED_UUID, 'plan.json'), 'utf8')).total_esperado).toBe(0);
+  });
+  it('detecta cualquier cambio posterior del estado original sin parchear su binding', async () => {
+    const h = await harness(); const old = await legacyState(h);
+    await transition(h.root, h.env, true);
+    await writeFile(join(h.root, '.automation/state.json'), old + '\n');
+    await expect(runAutomatic(h.base)).rejects.toThrow('SOURCE_TRANSITION_MISMATCH');
+    expect(h.source).not.toHaveBeenCalled();
+  });
+  it('impide reutilizar el UUID bloqueado y rechaza manifiestos VF en nuevas extracciones', async () => {
+    const h = await harness();
+    await expect(extract(h.source(), { anio: 2026, mes: 10 }, h.env, false, join(h.root, '.runs/spwconsumomes-v1'), { uuid: LEGACY_BLOCKED_UUID })).rejects.toThrow('LEGACY_UUID_RESERVED');
+    const old = JSON.parse(await readFile('../docs/schemas/spwconsumomesvf.v1.json', 'utf8'));
+    expect(() => validateManifest(old)).toThrow();
+    expect(validateManifest(JSON.parse(await readFile(h.env.SQL_SCHEMA_FILE, 'utf8'))).columns).toHaveLength(38);
+  });
+  it('preserva una publicacion legacy y reconstruye solo un periodo expresamente autorizado', async () => {
+    const h = await harness(); await runAutomatic(h.base);
+    const old = h.backend.active.get('2023-1')!;
+    const original = h.backend.receipt.bind(h.backend);
+    h.backend.receipt = uuid => uuid === old ? { ...original(uuid), schema_checksum: 'a'.repeat(64), source: { classification: 'legacy', procedure: 'dbo.SPWConsumoMesVF', source_id: 'spwconsumomesvf-v1', column_count: 34, schema_checksum: 'a'.repeat(64) } } : original(uuid);
+    await runAutomatic(h.base);
+    expect(h.connections).toHaveBeenCalledTimes(1); expect(h.backend.runs.size).toBe(1);
+    await runAutomatic({ ...h.base, rebuildPeriods: ['2023-01'] });
+    expect(h.connections).toHaveBeenCalledTimes(2); expect(h.backend.runs.size).toBe(2);
+    expect(h.backend.runs.has(old)).toBe(true);
   });
 });

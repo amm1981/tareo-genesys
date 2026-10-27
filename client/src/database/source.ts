@@ -3,6 +3,7 @@ import sql from 'mssql';
 import { sqlConfig, type Environment } from '../config/env.js';
 import type { Period } from '../config/args.js';
 import { validateManifest, type Manifest } from '../utils/protocol.js';
+import { CURRENT_PROCEDURE, assertExtractionColumns } from '../config/source.js';
 
 export class Source {
   private pool: sql.ConnectionPool;
@@ -26,11 +27,12 @@ export class Source {
     request.on('recordset', (columns: Array<sql.IColumnMetadata[string]>) => {
       try {
         if (++sets !== 1) throw new Error('El SP devolvió múltiples conjuntos; se requiere revisar el mapeo.');
-        manifest = validateManifest({ version: 1, database: 'CASABLANCA', procedure: 'dbo.SPWConsumoMesVF', columns: columns.map(c => {
+        manifest = validateManifest({ version: 1, database: 'CASABLANCA', procedure: CURRENT_PROCEDURE, columns: columns.map(c => {
           const type = Object.entries(sql.TYPES).find(([, t]) => t === c.type)?.[0];
           if (!type) throw new Error('Tipo SQL no reconocido.');
           return { name: c.name, type, nullable: c.nullable, precision: ['Money','SmallMoney'].includes(type) ? (type === 'Money' ? 19 : 10) : c.precision ?? null, scale: ['Money','SmallMoney'].includes(type) ? 4 : c.scale ?? null, length: c.length ?? null };
         }) });
+        assertExtractionColumns(manifest);
         schema(manifest);
       } catch (e) { fail(e); }
     });
@@ -42,7 +44,7 @@ export class Source {
         await consume(row, manifest);
       }).catch(fail).finally(() => request.resume());
     });
-    try { await request.execute('dbo.SPWConsumoMesVF'); } catch (e) { failure ??= e; }
+    try { await request.execute(CURRENT_PROCEDURE); } catch (e) { failure ??= e; }
     await pending;
     if (failure) throw failure;
     if (!manifest) throw new Error('No se recibió el esquema del SP.');

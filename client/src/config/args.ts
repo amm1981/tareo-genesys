@@ -13,6 +13,7 @@ export function argumentsFrom(argv: string[]) {
     'check-connection': { type: 'boolean', default: false },
     'inspect-schema': { type: 'boolean', default: false },
     resume: { type: 'string' }, status: { type: 'string' },
+    'schema-file': { type: 'string' },
   }, strict: true });
   if (values.resume && !z.uuid().safeParse(values.resume).success) throw new Error('UUID de reanudación inválido.');
   if (values.status && !z.uuid().safeParse(values.status).success) throw new Error('UUID de estado inválido.');

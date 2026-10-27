@@ -33,7 +33,7 @@ $node = (Get-Command node -ErrorAction Stop).Source
 $powershell = Join-Path $env:WINDIR 'System32\WindowsPowerShell\v1.0\powershell.exe'
 & $powershell -NoLogo -NoProfile -NonInteractive -ExecutionPolicy RemoteSigned -File (Join-Path $PSScriptRoot 'Invoke-AutoSync.ps1') -ProjectRoot $fixture -NodePath $node -Mode daily
 if ($LASTEXITCODE -ne 7) { throw 'El wrapper no conservo el codigo de salida.' }
-$log = Get-ChildItem -LiteralPath (Join-Path $fixture 'client\.automation') -Filter '*.jsonl' | Select-Object -First 1
+$log = Get-ChildItem -LiteralPath (Join-Path $fixture 'client\.automation\spwconsumomes-v1') -Filter '*.jsonl' | Select-Object -First 1
 $contents = [IO.File]::ReadAllText($log.FullName)
 if ($contents.Contains('SENSITIVE_FIXTURE_MARKER')) { throw 'Se copio un error arbitrario al log.' }
 if (($contents -split "`n" | Where-Object { $_ } | Select-Object -Last 1 | ConvertFrom-Json).exit_code -ne 7) { throw 'Resultado no registrado.' }

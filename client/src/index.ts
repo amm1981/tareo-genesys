@@ -11,6 +11,7 @@ import { extract, upload, type RunPlan } from './services/sync.js';
 import { Api, HttpError } from './services/api.js';
 import { describeSourceError } from './utils/source-error.js';
 import { acquireLock } from './services/lock.js';
+import { CURRENT_SOURCE_ID, LEGACY_BLOCKED_UUID, CURRENT_SCHEMA_FILE } from './config/source.js';
 
 process.chdir(join(dirname(fileURLToPath(import.meta.url)), '..'));
 // dist/index.js y src/index.ts comparten el mismo directorio padre client/.
@@ -23,13 +24,15 @@ async function confirmation(plan: RunPlan) {
 }
 async function main() {
   const args = argumentsFrom(process.argv.slice(2));
-  const env = environmentSchema.parse(process.env);
+  const env = environmentSchema.parse({ ...process.env, SQL_SCHEMA_FILE: args['schema-file'] ?? CURRENT_SCHEMA_FILE });
   const api = new Api(env);
   if (args.status) { console.log(JSON.stringify(await api.call(`/api/v1/sync/runs/${args.status}/status`))); return; }
   if (args.resume) {
-    const folder = join('.runs', args.resume);
+    if (args.resume === LEGACY_BLOCKED_UUID) throw new Error('UUID anterior reservado para auditoría; no se puede reutilizar.');
+    const folder = join('.runs', CURRENT_SOURCE_ID, args.resume);
     const plan = JSON.parse(await readFile(join(folder,'plan.json'), 'utf8')) as RunPlan;
     if (plan.uuid !== args.resume) throw new Error('UUID local no coincide.');
+    (await import('./utils/protocol.js')).validateManifest(JSON.parse(plan.schema_json));
     if (!await confirmation(plan)) { console.log('Envío cancelado.'); return; }
     console.log(await upload(api, plan, folder)); return;
   }
@@ -40,6 +43,10 @@ async function main() {
     if (args['check-connection']) { console.log('Conexión verificada exclusivamente con CASABLANCA.'); return; }
     const dry = args['dry-run'] || args['inspect-schema'];
     const result = await extract(source, args.period!, env, dry);
+    if (args['dry-run'] && !args['inspect-schema']) {
+      const approved = (await import('./utils/protocol.js')).validateManifest(JSON.parse(await readFile(env.SQL_SCHEMA_FILE, 'utf8')));
+      if (JSON.stringify(approved) !== JSON.stringify(result.manifest)) throw new Error('El esquema observado difiere del revisado; detener y volver a inspeccionar sin sobrescribir archivos.');
+    }
     console.log(JSON.stringify({ uuid: result.plan.uuid, leidos: result.plan.origen_total, conservados: result.plan.total_esperado, descartados: result.plan.descartados, columnas: result.manifest.columns }));
     if (args['inspect-schema']) {
       const content = JSON.stringify(result.manifest);

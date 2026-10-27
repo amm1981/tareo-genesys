@@ -10,6 +10,7 @@
     "sync:backfill": "tsx src/auto.ts backfill",
     "sync:daily": "tsx src/auto.ts daily",
     "sync:retention": "tsx src/retention.ts",
+    "sync:transition": "tsx src/transition.ts",
     "check:connection": "tsx src/index.ts --check-connection",
     "diagnose:connection": "tsx scripts/diagnose-connection.ts",
     "inspect:schema": "tsx src/index.ts --inspect-schema",

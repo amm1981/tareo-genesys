@@ -14,6 +14,7 @@
 **/database/*.sqlite*
 client/.runs/
 client/schema.actual.json
+client/schema.spwconsumomes.json
 server/storage/app/private/source-schema.json
 server/storage/app/private/schema-test-*
 *.log

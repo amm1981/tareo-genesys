@@ -5,10 +5,12 @@ import { z } from 'zod';
 import { HttpError } from '../services/api.js';
 import type { RunPlan } from '../services/sync.js';
 import { inPeriod, sha256, validateManifest, type Batch } from '../utils/protocol.js';
+import { CURRENT_COLUMN_COUNT, LEGACY_BLOCKED_UUID } from '../config/source.js';
 import type { Month } from './calendar.js';
 
 export interface SyncApi { call<T>(path: string, body?: unknown): Promise<T> }
 export interface Verification {
+  source?: { classification: 'legacy' | 'current'; procedure: string; source_id: string; column_count: number; schema_checksum: string };
   uuid: string; anio: number; mes: number | null; estado: string; total_esperado: number; total_recibido: number;
   total_lotes: number; lotes_recibidos: number; checksum_total: string; schema_checksum: string; filas_publicadas: number; verificado: boolean;
 }
@@ -19,7 +21,7 @@ const planSchema = z.object({ uuid: z.uuid(), anio: z.number().int().min(1900).m
   origen_total: z.number().int().nonnegative(), descartados: z.number().int().nonnegative() });
 export async function inspectLocal(folder: string, uuid: string, period: Month, schemaHash: string) {
   const plan = planSchema.parse(JSON.parse(await readFile(join(folder, 'plan.json'), 'utf8')));
-  if (plan.uuid !== uuid || plan.anio !== period.anio || plan.mes !== period.mes || plan.schema_checksum !== schemaHash || sha256(plan.schema_json) !== schemaHash || validateManifest(JSON.parse(plan.schema_json)).columns.length !== 34 || plan.origen_total - plan.descartados !== plan.total_esperado || (plan.total_esperado === 0) !== (plan.total_lotes === 0) || plan.total_lotes > plan.total_esperado) throw new Error('LOCAL_PLAN_INVALID');
+  if (uuid === LEGACY_BLOCKED_UUID || plan.uuid !== uuid || plan.anio !== period.anio || plan.mes !== period.mes || plan.schema_checksum !== schemaHash || sha256(plan.schema_json) !== schemaHash || validateManifest(JSON.parse(plan.schema_json)).columns.length !== CURRENT_COLUMN_COUNT || plan.origen_total - plan.descartados !== plan.total_esperado || (plan.total_esperado === 0) !== (plan.total_lotes === 0) || plan.total_lotes > plan.total_esperado) throw new Error('LOCAL_PLAN_INVALID');
   const ledger = createHash('sha256');
   const prefix = [0];
   let count = 0;

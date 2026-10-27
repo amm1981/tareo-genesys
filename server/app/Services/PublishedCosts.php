@@ -11,6 +11,26 @@ class PublishedCosts
 {
     public function __construct(private SourceSchema $schema) {}
 
+    public function publications(int $year, int $month, ?string $before, int $limit): array
+    {
+        $query = DB::table('sync_runs')->where('estado', 'completada')->where('anio', $year)
+            ->where(fn ($q) => $q->whereNull('mes')->orWhere('mes', $month));
+        if ($before !== null) {
+            $boundary = (clone $query)->where('uuid', $before)->value('id');
+            if (! $boundary) {
+                throw new SyncException('invalid_boundary', 'Publicación de referencia no disponible en el período.', 422);
+            }
+            $query->where('id', '<', $boundary);
+        }
+        $runs = $query->orderByDesc('id')->limit($limit + 1)->get();
+        $more = $runs->count() > $limit;
+        $page = $runs->take($limit);
+
+        return ['data' => $page->map(fn ($run) => ['publicacion_uuid' => $run->uuid, 'publicado_en' => $run->fecha_finalizacion,
+            'source' => $this->schema->identity($run->schema_json)])->values()->all(),
+            'meta' => ['next_before_uuid' => $more ? $page->last()->uuid : null]];
+    }
+
     public function periods(int $year): array
     {
         return DB::table('sync_periods as p')
@@ -50,6 +70,9 @@ class PublishedCosts
             $run = DB::table('sync_runs')->where('uuid', $state['uuid'])->where('anio', $filters['anio'])
                 ->where(fn ($q) => $q->whereNull('mes')->orWhere('mes', $filters['mes']))
                 ->where('estado', 'completada')->first();
+        } elseif (isset($filters['publicacion_uuid'])) {
+            $run = DB::table('sync_runs')->where('uuid', $filters['publicacion_uuid'])->where('anio', $filters['anio'])
+                ->where(fn ($q) => $q->whereNull('mes')->orWhere('mes', $filters['mes']))->where('estado', 'completada')->first();
         } else {
             $run = DB::table('sync_periods as p')->join('sync_runs as r', 'r.id', '=', 'p.active_run_id')
                 ->where('p.anio', $filters['anio'])->where('p.mes', $filters['mes'])
@@ -57,6 +80,9 @@ class PublishedCosts
         }
         if (! $run) {
             throw new SyncException('period_not_published', 'No hay una publicación disponible para el período solicitado.', 404);
+        }
+        if (! hash_equals($run->schema_checksum, hash('sha256', $run->schema_json)) || ! $this->schema->registered($run->schema_json)) {
+            throw new SyncException('unrecognised_schema', 'La publicación requiere revisión de su esquema registrado.', 409);
         }
         $query = DB::table('costos_agricolas')->where('sync_run_id', $run->id)
             ->where('anio', $filters['anio'])->where('mes', $filters['mes'])->where('numero_fila', '>', $after);
@@ -94,6 +120,7 @@ class PublishedCosts
         return ['data' => $data, 'meta' => [
             'anio' => $filters['anio'], 'mes' => $filters['mes'],
             'publicacion_uuid' => $run->uuid, 'publicado_en' => $run->fecha_finalizacion,
+            'source' => $this->schema->identity($run->schema_json),
             'paginacion' => ['limite' => $filters['limite'], 'cantidad' => count($data), 'hay_mas' => $hasMore, 'siguiente_cursor' => $next],
         ]];
     }

@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Validator;
 
 class SourceSchema
 {
+    public const CURRENT = 'dbo.SPWConsumoMes';
+
+    public const LEGACY = 'dbo.SPWConsumoMesVF';
+
     public const EXACT = ['Decimal', 'Numeric', 'Money', 'SmallMoney'];
 
     public const TYPES = ['TinyInt', 'SmallInt', 'Int', 'BigInt', 'Bit', 'Decimal', 'Numeric', 'Money', 'SmallMoney', 'Float', 'Real', 'Char', 'NChar', 'VarChar', 'NVarChar', 'Text', 'NText', 'Date', 'Time', 'DateTime', 'SmallDateTime', 'DateTime2', 'DateTimeOffset', 'UniqueIdentifier', 'Binary', 'VarBinary', 'Image', 'Xml'];
@@ -21,7 +25,7 @@ class SourceSchema
             throw new SyncException('invalid_schema', 'Esquema JSON inválido.', 422);
         }
         Validator::make(is_array($schema) ? $schema : [], [
-            'version' => 'required|integer|in:1', 'database' => 'required|in:CASABLANCA', 'procedure' => 'required|in:dbo.SPWConsumoMesVF',
+            'version' => 'required|integer|in:1', 'database' => 'required|in:CASABLANCA', 'procedure' => 'required|in:'.self::CURRENT.','.self::LEGACY,
             'columns' => 'required|array|min:1|max:500', 'columns.*' => 'required|array:name,type,nullable,precision,scale,length',
             'columns.*.name' => 'required|string|max:128', 'columns.*.type' => 'required|in:'.implode(',', self::TYPES),
             'columns.*.nullable' => 'required|boolean', 'columns.*.precision' => 'present|nullable|integer|min:1|max:38',
@@ -48,6 +52,12 @@ class SourceSchema
     public function approved(string $json): array
     {
         $schema = $this->parse($json);
+        if ($schema['procedure'] !== self::CURRENT) {
+            throw new SyncException('legacy_source_read_only', 'La fuente anterior solo permite auditoría y consulta histórica.', 422);
+        }
+        if (count($schema['columns']) !== config('sync.expected_columns')) {
+            throw new SyncException('current_schema_columns', 'La fuente actual requiere el esquema completo inspeccionado.', 422);
+        }
         $file = config('sync.schema_file');
         if (! is_file($file) || ! hash_equals(hash('sha256', file_get_contents($file)), hash('sha256', $json))) {
             throw new SyncException('schema_not_approved', 'Inspeccione y prepare el esquema real antes de transferir.', 422);
@@ -58,6 +68,9 @@ class SourceSchema
             if (! isset($columns[$name])) {
                 throw new SyncException('schema_not_migrated', 'Faltan migraciones de las columnas de origen.', 422);
             }
+            if (! $this->compatibleExisting($c, $columns[$name])) {
+                throw new SyncException('schema_storage_mismatch', 'Almacenamiento existente incompatible; revisar sin alterar datos.', 422);
+            }
             if (DB::getDriverName() === 'mysql' && in_array($c['type'], self::EXACT) && strtolower($columns[$name]['type']) !== "decimal({$c['precision']},{$c['scale']})") {
                 throw new SyncException('decimal_storage_mismatch', 'Precisión o escala MySQL incompatible con el origen.', 422);
             }
@@ -67,6 +80,76 @@ class SourceSchema
         }
 
         return $schema;
+    }
+
+    public function registered(string $json): bool
+    {
+        $schema = $this->parse($json);
+        if ($schema['procedure'] === self::CURRENT && count($schema['columns']) !== config('sync.expected_columns')) {
+            return false;
+        }
+        $files = $schema['procedure'] === self::CURRENT ? [config('sync.schema_file')] : config('sync.legacy_schema_files', []);
+        foreach ($files as $file) {
+            if (is_file($file) && hash_equals(hash('sha256', $json), hash_file('sha256', $file))) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    public function identity(string $json): array
+    {
+        $schema = $this->parse($json);
+
+        return ['procedure' => $schema['procedure'], 'schema_version' => $schema['version'],
+            'source_id' => $schema['procedure'] === self::CURRENT ? 'spwconsumomes-v1' : 'spwconsumomesvf-v1',
+            'classification' => $schema['procedure'] === self::CURRENT ? 'current' : 'legacy',
+            'column_count' => count($schema['columns']), 'schema_checksum' => hash('sha256', $json)];
+    }
+
+    public function compatibleExisting(array $column, array $stored): bool
+    {
+        if ($column['nullable'] && ! ($stored['nullable'] ?? false)) {
+            return false;
+        }
+        if (DB::getDriverName() !== 'mysql') {
+            return true; // SQLite solo se utiliza en las pruebas; no acredita tipos de MySQL.
+        }
+        $type = strtolower($stored['type']);
+        if (in_array($column['type'], self::EXACT)) {
+            return $type === "decimal({$column['precision']},{$column['scale']})";
+        }
+        if (FloatCost::matches($column)) {
+            return $type === 'decimal(65,30)';
+        }
+        if (in_array($column['type'], ['Int', 'SmallInt', 'TinyInt', 'BigInt'])) {
+            if (! preg_match('/^(tinyint|smallint|mediumint|int|integer|bigint)(?:\(\d+\))?( unsigned)?$/', $type, $match)) {
+                return false;
+            }
+            $limits = ['tinyint' => ['-128', '127', '255'], 'smallint' => ['-32768', '32767', '65535'],
+                'mediumint' => ['-8388608', '8388607', '16777215'], 'int' => ['-2147483648', '2147483647', '4294967295'],
+                'integer' => ['-2147483648', '2147483647', '4294967295'], 'bigint' => ['-9223372036854775808', '9223372036854775807', '18446744073709551615']];
+            $source = match ($column['type']) {
+                'TinyInt' => ['0', '255'], 'SmallInt' => ['-32768', '32767'], 'Int' => ['-2147483648', '2147483647'],
+                default => ['-9223372036854775808', '9223372036854775807'],
+            };
+            $target = $limits[$match[1]];
+
+            return bccomp(isset($match[2]) ? '0' : $target[0], $source[0], 0) <= 0
+                && bccomp(isset($match[2]) ? $target[2] : $target[1], $source[1], 0) >= 0;
+        }
+        if (in_array($column['type'], ['Float', 'Real'])) {
+            return in_array($type, ['double', 'float'], true);
+        }
+        if (in_array($type, ['text', 'mediumtext', 'longtext'], true)) {
+            return true;
+        }
+        if (! in_array($column['type'], ['Char', 'VarChar', 'NChar', 'NVarChar'], true)) {
+            return false;
+        }
+
+        return preg_match('/^varchar\((\d+)\)$/', $type, $match) && $column['length'] > 0 && (int) $match[1] >= $column['length'];
     }
 
     public function storageName(string $name): string

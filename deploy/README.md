@@ -1,5 +1,7 @@
 # Despliegue de GET_Genesys
 
+> Actualización 26/10/2026: toda nueva extracción usa exclusivamente **dbo.SPWConsumoMes (38 columnas)**. El esquema VF de 38 columnas queda registrado para consulta histórica. Antes de operar, seguir [la transición de fuente](../docs/CAMBIO_FUENTE.md). No reutilizar el checkpoint vacío anterior ni reconstruir históricos sin aprobación.
+
 Destino previsto: **api.labour.agrocalera.app**, VPS **209.126.85.229**, Ubuntu **24.04 LTS**, PHP **8.3.6-0ubuntu0.24.04.13** o una revisión oficial posterior de seguridad, Nginx y MySQL 8/InnoDB. El sistema operativo, rutas, usuarios, certificados, proxy/CDN y servicios reales están pendientes del inventario del administrador.
 
 El paquete está preparado localmente. La conexión SSH no interactiva reconoció la clave, pero no pudo firmar; el usuario eligió ejecutar personalmente el inventario. No se instalaron paquetes ni se modificó el VPS. No hay un script que despliegue o sobrescriba configuración automáticamente.
@@ -17,7 +19,7 @@ La frase de paso se introduce exclusivamente en la terminal SSH. `tr` elimina lo
 
 ## 2. Qué contiene el paquete
 
-- `server/`: código Laravel, migraciones, composer.lock, ejemplo **de producción** y esquema privado de 34 columnas.
+- `server/`: código Laravel, migraciones, composer.lock, ejemplo **de producción** y esquema privado de 38 columnas.
 - `deploy/`: esta guía, configuración Nginx y pool FPM en formato `.example`, inventario y comprobaciones.
 - `manifest.json`: SHA-256 de cada archivo del release.
 - `RELEASE.md`: identificación y requisitos.
@@ -57,7 +59,7 @@ Propuesta, pendiente de contrastar con el VPS:
   current -> releases/<release>
 ```
 
-`server/.env` apuntaría a `shared/.env` y `server/storage` a `shared/storage`. Crear enlaces únicamente dentro del nuevo release y conservar el storage compartido. El esquema del paquete debe copiarse a `shared/storage/app/private/source-schema.json` y mantener el hash `f3b5ba98326f724a41277cd9410b0658c71be750f23d9af17cd538ca57fefc0c`.
+`server/.env` apuntaría a `shared/.env` y `server/storage` a `shared/storage`. Crear enlaces únicamente dentro del nuevo release y conservar el storage compartido. El esquema del paquete debe copiarse a `shared/storage/app/private/source-schema-spwconsumomes-v1.json` y mantener el hash `fccdf733fd8125cbbd3ed54179713ec18f0305c775f2bf7646692218f4eb48f9`.
 
 Confirmar un usuario de aplicación dedicado y los usuarios/grupos reales de Nginx/FPM. Permisos propuestos: directorios 750, código 640 y acceso de escritura solamente a storage/ y bootstrap/cache para el pool. El archivo de entorno es privado; sin permisos 777. Las rutas y cuentas aún no se consideran existentes.
 
@@ -81,7 +83,7 @@ php8.3 artisan config:cache
 php8.3 artisan route:cache
 ```
 
-El comando `composer` debe ejecutar PHP 8.3. Verificarlo o invocar `php8.3 /ruta/verificada/composer.phar`. No usar `composer update`, `--ignore-platform-reqs`, `migrate:fresh`, `db:wipe` ni rollback de migraciones que eliminen datos de origen. Las migraciones de las 34 columnas ya vienen incluidas; no ejecutar `sync:schema:prepare` de nuevo sobre ellas.
+El comando `composer` debe ejecutar PHP 8.3. Verificarlo o invocar `php8.3 /ruta/verificada/composer.phar`. No usar `composer update`, `--ignore-platform-reqs`, `migrate:fresh`, `db:wipe` ni rollback de migraciones que eliminen datos de origen. Las migraciones de las 38 columnas ya vienen incluidas; no ejecutar `sync:schema:prepare` de nuevo sobre ellas.
 
 Desde la raíz del release:
 

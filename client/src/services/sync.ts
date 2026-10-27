@@ -5,13 +5,15 @@ import type { Period } from '../config/args.js';
 import type { Environment } from '../config/env.js';
 import { inPeriod, serializeRow, sha256, validateManifest, type Manifest, type WireRow, type Batch } from '../utils/protocol.js';
 import { Api } from './api.js';
+import { CURRENT_SOURCE_ID, LEGACY_BLOCKED_UUID } from '../config/source.js';
 
 export interface Extractor {
   extract(period: Period, onSchema: (manifest: Manifest) => void, onRow: (row: unknown[], manifest: Manifest) => Promise<void>): Promise<Manifest>;
 }
 export interface RunPlan { uuid: string; anio: number; mes: number | null; total_esperado: number; total_lotes: number; checksum_total: string; schema_json: string; schema_checksum: string; origen_total: number; descartados: number }
-export async function extract(source: Extractor, period: Period, env: Environment, dry: boolean, directory = '.runs', options: { uuid?: string; beforeWrite?: (bytes: number) => Promise<void> } = {}) {
+export async function extract(source: Extractor, period: Period, env: Environment, dry: boolean, directory = join('.runs', CURRENT_SOURCE_ID), options: { uuid?: string; beforeWrite?: (bytes: number) => Promise<void> } = {}) {
   const uuid = options.uuid ?? randomUUID();
+  if (uuid === LEGACY_BLOCKED_UUID) throw new Error('LEGACY_UUID_RESERVED');
   if (!/^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i.test(uuid)) throw new Error('UUID inválido.');
   const folder = join(directory, uuid);
   if (!dry) { await mkdir(directory, { recursive: true, mode: 0o700 }); await mkdir(folder, { mode: 0o700 }); }
@@ -61,6 +63,8 @@ export async function extract(source: Extractor, period: Period, env: Environmen
   return { plan, manifest, folder };
 }
 export async function upload(api: Api, plan: RunPlan, folder: string) {
+  validateManifest(JSON.parse(plan.schema_json));
+  if (plan.uuid === LEGACY_BLOCKED_UUID) throw new Error('LEGACY_UUID_RESERVED');
   await api.call('/api/v1/sync/runs', plan);
   for (let i = 1; i <= plan.total_lotes; i++) {
     const batch = JSON.parse(await readFile(join(folder, `${i}.json`), 'utf8')) as Batch;

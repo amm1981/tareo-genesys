@@ -1,5 +1,7 @@
 # API de consulta para sistemas externos
 
+> Actualización 26/10/2026: toda nueva extracción usa exclusivamente **dbo.SPWConsumoMes (38 columnas)**. El esquema VF de 34 columnas queda registrado para consulta histórica. Antes de operar, seguir [la transición de fuente](CAMBIO_FUENTE.md). No reutilizar el checkpoint vacío anterior ni reconstruir históricos sin aprobación.
+
 Base de producción: `https://api.labour.agrocalera.app`. Las rutas están implementadas; su disponibilidad pública depende del despliegue y DNS/HTTPS del VPS. En desarrollo se admite `http://127.0.0.1:8000`.
 
 Cada sistema usa una cuenta de consulta propia, creada por un administrador. El usuario y contraseña se envían en el body JSON del login; las siguientes solicitudes usan el token devuelto en `Authorization: Bearer ...`. Estas cuentas consultan los períodos publicados de esta instalación. No hay partición de datos por empresa o usuario: cada cuenta habilitada tiene acceso de lectura a todos esos períodos. El identificador no es un usuario de SQL Server ni de MySQL.
@@ -117,7 +119,7 @@ Respuesta ilustrativa (se muestran solo algunas columnas dentro de `datos`):
 }
 ```
 
-En la respuesta real, `datos` conserva las 34 columnas originales, nombres, Unicode, espacios, fechas y NULL. NUMERIC/MONEY siguen siendo strings con la escala original. Los cuatro costos FLOAT se exponen también como strings decimales, extraídos del token numérico del JSON almacenado y expandiendo exponentes sin convertirlos a float. Esto conserva su representación aproximada de origen; no convierte FLOAT en un importe exacto. El resto de los tipos mantiene su representación del protocolo de extracción. No convertir estos strings a `Number`, `float` o `double` si el sistema necesita conservar todas sus cifras.
+En la respuesta real, `datos` conserva las 38 columnas originales en la fuente actual (34 en históricos VF), nombres, Unicode, espacios, fechas y NULL. NUMERIC/MONEY siguen siendo strings con la escala original. Los ocho costos FLOAT de la fuente actual se exponen también como strings decimales, extraídos del token numérico del JSON almacenado y expandiendo exponentes sin convertirlos a float. Esto conserva su representación aproximada de origen; no convierte FLOAT en un importe exacto. El resto de los tipos mantiene su representación del protocolo de extracción. No convertir estos strings a `Number`, `float` o `double` si el sistema necesita conservar todas sus cifras.
 
 ## 5. Paginación consistente
 

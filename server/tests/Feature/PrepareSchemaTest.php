@@ -22,6 +22,7 @@ class PrepareSchemaTest extends TestCase
         Schema::create('costos_agricolas', fn (Blueprint $t) => $t->id());
         $target = storage_path('app/private/schema-test-'.Str::uuid().'.json');
         config(['sync.schema_file' => $target]);
+        config(['sync.expected_columns' => 3]);
         $before = glob(database_path('migrations/*_add_source_columns_*.php'));
         $created = [];
         try {

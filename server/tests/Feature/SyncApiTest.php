@@ -23,6 +23,7 @@ class SyncApiTest extends TestCase
     {
         parent::setUp();
         config(['sync.schema_file' => base_path('tests/fixtures/source-schema.json')]);
+        config(['sync.expected_columns' => 3]);
         $hasSourceDate = Schema::hasColumn('costos_agricolas', 'fecha_origen');
         Schema::table('costos_agricolas', function (Blueprint $t) use ($hasSourceDate) {
             if (! $hasSourceDate) {

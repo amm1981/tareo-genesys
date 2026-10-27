@@ -7,7 +7,7 @@ import type { Manifest } from '../src/utils/protocol.js';
 // Solo datos sintéticos. Este archivo no se ejecuta durante una sincronización.
 const costManifest: Manifest = { ...manifest, columns:[...manifest.columns, ...FLOAT_COST_COLUMNS.map(name=>({name,type:'Float' as const,nullable:true,precision:null,scale:null,length:8}))] };
 const schema_json=JSON.stringify(costManifest);
-const costRow=[...row,0.30000000000000004,1e-25,-123.45678901234567,0];
+const costRow=[...row,0.30000000000000004,1e-25,-123.45678901234567,0,null,-0.00000001,2.5,0];
 const payload=JSON.stringify([1,2].map(numero_fila=>({numero_fila,datos_json:serializeRow(costRow,costManifest)})));
 const checksum=sha256(payload);
 const batch={numero_lote:1,payload,checksum};

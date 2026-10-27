@@ -2,6 +2,7 @@ import { mkdir, open, readFile, rename, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { CURRENT_SOURCE_ID, LEGACY_BLOCKED_UUID } from '../config/source.js';
 
 const recordSchema = z.object({
   uuid: z.uuid(), anio: z.number().int().min(1900).max(9999), mes: z.number().int().min(1).max(12),
@@ -11,20 +12,22 @@ const recordSchema = z.object({
   checksum_total: z.string().regex(/^[a-f0-9]{64}$/).optional(), schema_checksum: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   spool_removed_at: z.iso.datetime().optional(),
 });
-const stateSchema = z.object({ version: z.literal(1), binding: z.string().regex(/^[a-f0-9]{64}$/), pending: z.uuid().nullable(),
+export const stateSchema = z.object({ version: z.literal(1), binding: z.string().regex(/^[a-f0-9]{64}$/), pending: z.uuid().nullable(),
   records: z.record(z.uuid(), recordSchema), daily: z.record(z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/), z.object({ day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), uuid: z.uuid() })) });
 export type RunRecord = z.infer<typeof recordSchema>;
 export type State = z.infer<typeof stateSchema>;
 
 export class Store {
   readonly folder: string;
-  constructor(root: string, private binding: string) { this.folder = join(root, '.automation'); }
+  constructor(private root: string, private binding: string) { this.folder = join(root, '.automation', CURRENT_SOURCE_ID); }
   async load(): Promise<State> {
+    await (await import('./transition.js')).requireTransition(this.root, this.binding);
     await mkdir(this.folder, { recursive: true, mode: 0o700 });
     let text: string;
     try { text = await readFile(join(this.folder, 'state.json'), 'utf8'); }
     catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') return { version: 1, binding: this.binding, pending: null, records: {}, daily: {} }; throw e; }
     const state = stateSchema.parse(JSON.parse(text));
+    if (state.pending === LEGACY_BLOCKED_UUID || state.records[LEGACY_BLOCKED_UUID]) throw new Error('LEGACY_UUID_RESERVED');
     if (state.binding !== this.binding || (state.pending && !state.records[state.pending])) throw new Error('STATE_DESTINATION_OR_SCHEMA_MISMATCH');
     for (const [uuid, record] of Object.entries(state.records)) if (record.uuid !== uuid) throw new Error('INVALID_STATE');
     return state;

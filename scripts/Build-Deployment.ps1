@@ -44,21 +44,23 @@ function Copy-ReleaseTree([string]$Relative) {
 
 $schemaSource = Join-Path $workspace 'docs/source-schema.json'
 $schema = [IO.File]::ReadAllText($schemaSource) | ConvertFrom-Json
-if ($schema.database -ne 'CASABLANCA' -or $schema.procedure -ne 'dbo.SPWConsumoMesVF' -or $schema.columns.Count -ne 34) { throw 'Esquema no revisado.' }
+if ($schema.database -ne 'CASABLANCA' -or $schema.procedure -ne 'dbo.SPWConsumoMes' -or $schema.columns.Count -ne 38) { throw 'Esquema no revisado.' }
 $schemaHash = (Get-FileHash -LiteralPath $schemaSource -Algorithm SHA256).Hash.ToLowerInvariant()
-$expectedSchemaHash = 'f3b5ba98326f724a41277cd9410b0658c71be750f23d9af17cd538ca57fefc0c'
+$expectedSchemaHash = 'fccdf733fd8125cbbd3ed54179713ec18f0305c775f2bf7646692218f4eb48f9'
 if ($schemaHash -ne $expectedSchemaHash) { throw 'Cambio del esquema: revisar antes de empaquetar.' }
 [IO.Directory]::CreateDirectory($stage) | Out-Null
 
 # Lista positiva. Nunca se copian client/, vendor/, tests/, .env ni caches/logs locales.
-foreach ($directory in @('server/app','server/config','server/routes','server/database/migrations','server/database/seeders','server/database/factories','server/public','deploy')) {
+foreach ($directory in @('server/app','server/config','server/routes','server/database/migrations','server/database/seeders','server/database/factories','server/public','server/resources/schemas','deploy')) {
     Copy-ReleaseTree $directory
 }
-foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md','docs/API_CONSULTA.md','docs/AUTOMATIZACION.md')) {
+foreach ($file in @('server/artisan','server/composer.json','server/composer.lock','server/bootstrap/app.php','server/bootstrap/providers.php','docs/PHP_PRODUCCION.md','docs/MAPEO_ORIGEN.md','docs/API_CONSULTA.md','docs/AUTOMATIZACION.md','docs/CAMBIO_FUENTE.md','docs/CAMBIO_FUENTE_ARCHIVOS.txt','docs/schema-inspection-spwconsumomes.json')) {
     Copy-ReleaseFile $file $file
 }
 Copy-ReleaseFile 'deploy/production.env.example' 'server/.env.example'
-Copy-ReleaseFile 'docs/source-schema.json' 'server/storage/app/private/source-schema.json'
+Copy-ReleaseFile 'docs/source-schema.json' 'server/storage/app/private/source-schema-spwconsumomes-v1.json'
+Copy-ReleaseFile 'docs/source-schema.json' 'docs/source-schema.json'
+Copy-ReleaseTree 'docs/schemas'
 foreach ($directory in @('server/bootstrap/cache','server/resources/views','server/storage/app/private','server/storage/framework/cache/data','server/storage/framework/sessions','server/storage/framework/views','server/storage/logs')) {
     $target = Join-Path $stage $directory
     [IO.Directory]::CreateDirectory($target) | Out-Null

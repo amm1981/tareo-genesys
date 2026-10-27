@@ -6,7 +6,7 @@ use App\Exceptions\SyncException;
 
 class FloatCost
 {
-    public const COLUMNS = ['CostoMPSoles', 'CostoMPUS$', 'CostoMP1Soles', 'CostoMP1US$'];
+    public const COLUMNS = ['CostoMPSoles', 'CostoMPUS$', 'CostoMP1Soles', 'CostoMP1US$', 'CostoHASSoles', 'CostoHASUS$', 'CostoHAS1Soles', 'CostoHAS1US$'];
 
     public static function matches(array $column): bool
     {

@@ -4,15 +4,18 @@ const state=vi.hoisted(()=>({database:'CASABLANCA',credentials:[] as unknown[],r
 vi.mock('mssql',async()=>{
   const {EventEmitter}=await import('node:events');
   const int=()=>({}); const date=()=>({}); const decimal=()=>({});
+  const {readFileSync}=await import('node:fs');
+  const sqlTypes:Record<string,any>={Int:int,DateTime2:date,Decimal:decimal,DateTime:()=>({}),VarChar:()=>({}),NVarChar:()=>({}),Money:()=>({}),Numeric:()=>({}),Float:()=>({})};
   class Request extends EventEmitter {
     stream=false; arrayRowMode=false; params:unknown[]=[]; paused=false; canceled=false;
     input(...args:unknown[]) { this.params.push(args); return this; }
     async query(text:string) { expect(text).toBe('SELECT DB_NAME() AS database_name'); return {recordset:[{database_name:state.database}]}; }
     pause() { this.paused=true; } resume() { this.paused=false; } cancel() { this.canceled=true; }
     async execute(name:string) {
-      expect(name).toBe('dbo.SPWConsumoMesVF');
+      expect(name).toBe('dbo.SPWConsumoMes');
       expect(this.stream).toBe(true); expect(this.arrayRowMode).toBe(true);
-      this.emit('recordset',[{name:'Fecha',type:date,nullable:false,length:8,scale:7},{name:'ImporteFixture',type:decimal,precision:38,scale:8,nullable:true,length:17}]);
+      const real=JSON.parse(readFileSync('../docs/source-schema.json','utf8'));
+      this.emit('recordset',real.columns.map((c:any)=>({...c,type:sqlTypes[c.type]})));
       this.emit('row',['2026-09-01T00:00:00.0000000','0.12345678']);
       return {};
     }
@@ -22,7 +25,7 @@ vi.mock('mssql',async()=>{
     async connect() {return this;} async close() {this.closed=true;}
     request() { const r=new Request(); state.request=r; return r; }
   }
-  return {default:{ConnectionPool,Int:int,TYPES:{Int:int,DateTime2:date,Decimal:decimal}}};
+  return {default:{ConnectionPool,Int:int,TYPES:sqlTypes}};
 });
 import {Source} from '../src/database/source.js';
 import {environmentSchema} from '../src/config/env.js';

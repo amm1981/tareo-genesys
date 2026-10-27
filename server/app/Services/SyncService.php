@@ -58,18 +58,18 @@ class SyncService
             $received += (int) $batch->total_registros;
             hash_update($digest, $batch->numero_lote.':'.$batch->checksum."\n");
         }
-        $schemaFile = config('sync.schema_file');
         $verified = $run->estado === 'completada' && $run->fecha_finalizacion !== null
             && $rows === (int) $run->total_esperado && (int) $run->total_recibido === $rows
             && $batches === (int) $run->total_lotes && (int) $run->lotes_recibidos === $batches
             && $received === $rows && $ordered && hash_equals($run->checksum_total, hash_final($digest))
             && hash_equals($run->schema_checksum, hash('sha256', $run->schema_json))
-            && is_file($schemaFile) && hash_equals($run->schema_checksum, hash_file('sha256', $schemaFile));
-        if ($verified) {
+            && $this->schema->registered($run->schema_json);
+        $identity = $this->schema->identity($run->schema_json);
+        if ($verified && $identity['classification'] === 'current') {
             $this->schema->approved($run->schema_json);
         }
 
-        return $this->summary($run) + ['checksum_total' => $run->checksum_total, 'schema_checksum' => $run->schema_checksum, 'filas_publicadas' => $rows, 'verificado' => $verified];
+        return $this->summary($run) + ['checksum_total' => $run->checksum_total, 'schema_checksum' => $run->schema_checksum, 'filas_publicadas' => $rows, 'verificado' => $verified, 'source' => $identity];
     }
 
     public function publication(int $year, int $month, int $user): array
@@ -93,6 +93,9 @@ class SyncService
 
     public function start(array $input, int $user): array
     {
+        if ($input['uuid'] === '237818a9-4870-4cfa-92e5-f5a2a448dbb3') {
+            throw new SyncException('legacy_uuid_reserved', 'UUID reservado para el checkpoint histórico; utilice una extracción nueva.', 422);
+        }
         $this->transactionalStorage();
         if (! hash_equals($input['schema_checksum'], hash('sha256', $input['schema_json']))) {
             throw new SyncException('schema_checksum', 'Checksum de esquema incorrecto.', 422);
@@ -165,7 +168,7 @@ class SyncService
             if ($run->estado !== 'pendiente' || $input['numero_lote'] !== $run->lotes_recibidos + 1 || $input['numero_lote'] > $run->total_lotes || $run->total_recibido + count($rows) > $run->total_esperado) {
                 throw new SyncException('batch_order', 'Estado, secuencia o total de lote incorrectos.');
             }
-            $schema = $this->schema->parse($run->schema_json);
+            $schema = $this->schema->approved($run->schema_json);
             $inserts = [];
             foreach ($rows as $i => $r) {
                 if (! is_array($r) || count($r) !== 2 || ! isset($r['numero_fila'],$r['datos_json']) || ! is_int($r['numero_fila']) || $r['numero_fila'] !== $run->total_recibido + $i + 1 || ! is_string($r['datos_json'])) {

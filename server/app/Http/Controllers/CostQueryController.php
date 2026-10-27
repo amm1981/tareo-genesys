@@ -9,6 +9,16 @@ use Illuminate\Validation\ValidationException;
 
 class CostQueryController extends Controller
 {
+    public function publications(Request $request, PublishedCosts $costs)
+    {
+        $input = Validator::make($request->query(), [
+            'anio' => ['required', 'integer', 'between:1900,9999'], 'mes' => ['required', 'integer', 'between:1,12'],
+            'antes_de_uuid' => ['sometimes', 'uuid'], 'limite' => ['sometimes', 'integer', 'between:1,100'],
+        ])->validate();
+
+        return response()->json($costs->publications((int) $input['anio'], (int) $input['mes'], $input['antes_de_uuid'] ?? null, (int) ($input['limite'] ?? 50)));
+    }
+
     public function index(Request $request, PublishedCosts $costs)
     {
         $input = Validator::make($request->query(), [
@@ -20,6 +30,7 @@ class CostQueryController extends Controller
             'fecha_hasta' => ['sometimes', 'date_format:Y-m-d'],
             'limite' => ['sometimes', 'integer', 'between:1,500'],
             'cursor' => ['sometimes', 'string', 'min:1', 'max:2048'],
+            'publicacion_uuid' => ['sometimes', 'uuid'],
         ])->validate();
         $period = sprintf('%04d-%02d', $input['anio'], $input['mes']);
         foreach (['fecha_desde', 'fecha_hasta'] as $key) {
@@ -36,6 +47,9 @@ class CostQueryController extends Controller
             'fecha_desde' => $input['fecha_desde'] ?? null, 'fecha_hasta' => $input['fecha_hasta'] ?? null,
             'limite' => (int) ($input['limite'] ?? 100),
         ];
+        if (isset($input['publicacion_uuid'])) {
+            $filters['publicacion_uuid'] = $input['publicacion_uuid'];
+        }
 
         return response()->json($costs->page($filters, $input['cursor'] ?? null, $request->user()->id));
     }

@@ -1,5 +1,6 @@
 import { lstat, readdir, readFile, unlink, rmdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import { CURRENT_SOURCE_ID } from '../config/source.js';
 import type { State } from './store.js';
 import { Store } from './store.js';
 import { folderBytes } from './disk.js';
@@ -10,7 +11,7 @@ export async function retainLocal(root: string, state: State, store: Store, now:
   const report: Array<{ uuid: string; anio: number; mes: number; bytes: number }> = [];
   for (const record of Object.values(state.records)) {
     if (record.status !== 'verified' || record.uuid === state.pending || record.spool_removed_at || Date.parse(record.updated_at) > now.getTime() - days * 86400000) continue;
-    const folder = join(root, '.runs', record.uuid);
+    const folder = join(root, '.runs', CURRENT_SOURCE_ID, record.uuid);
     let stat;
     try { stat = await lstat(folder); } catch (e) { if ((e as NodeJS.ErrnoException).code === 'ENOENT') continue; throw e; }
     if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error('RETENTION_PATH_INVALID');

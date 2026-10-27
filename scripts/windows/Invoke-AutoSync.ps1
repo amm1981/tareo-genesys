@@ -11,7 +11,7 @@ try {
     $client = Join-Path $root 'client'
     $entry = Join-Path $client 'dist\auto.js'
     if (!(Test-Path -LiteralPath $client -PathType Container)) { throw 'PROJECT_NOT_FOUND' }
-    $logs = Join-Path $client '.automation'
+    $logs = Join-Path $client '.automation\spwconsumomes-v1'
     [IO.Directory]::CreateDirectory($logs) | Out-Null
     $log = Join-Path $logs ('task-' + [DateTime]::UtcNow.ToString('yyyyMM') + '.jsonl')
     $utf8 = [Text.UTF8Encoding]::new($false)

@@ -25,7 +25,7 @@ export const environmentSchema = z.object({
   MAX_BATCH_BYTES: z.coerce.number().int().min(1024).max(4194304).default(4194304),
   REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(600000).default(60000),
   HTTP_RETRIES: z.coerce.number().int().min(0).max(5).default(3),
-  SQL_SCHEMA_FILE: z.string().default('schema.actual.json'),
+  SQL_SCHEMA_FILE: z.string().default('schema.spwconsumomes.json'),
 });
 export type Environment = z.infer<typeof environmentSchema>;
 export function sqlConfig(env: Environment): SqlConfig {

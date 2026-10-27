@@ -10,6 +10,7 @@ Route::post('/v1/auth/login', [ApiAuthController::class, 'login'])->middleware('
 Route::prefix('v1')->middleware(['auth:sanctum', 'query.token', 'throttle:api-query'])->group(function () {
     Route::post('/auth/logout', [ApiAuthController::class, 'logout']);
     Route::get('/costos/periodos', [CostQueryController::class, 'periods']);
+    Route::get('/costos/publicaciones', [CostQueryController::class, 'publications']);
     Route::get('/costos', [CostQueryController::class, 'index']);
 });
 Route::prefix('v1/sync')->middleware(['auth:sanctum', 'sync.token', 'throttle:120,1'])->group(function () {
