@@ -31,8 +31,20 @@ return new class extends Migration
                 throw new RuntimeException('Falta una columna anterior: revisar las migraciones instaladas.');
             }
         }
+        if ($missing === []) {
+            return;
+        }
         // Metadatos observados el 26/10/2026: los cuatro campos son FLOAT(8), nullable.
         // El sobre DECIMAL conserva el token enviado; no implica exactitud del FLOAT original.
+        $connection = DB::connection();
+        if ($connection->getDriverName() === 'mysql') {
+            $grammar = $connection->getQueryGrammar();
+            $additions = array_map(fn (string $name) => 'ADD COLUMN '.$grammar->wrap($name).' DECIMAL(65,30) NULL', $missing);
+            // INSTANT explícito: si MySQL no puede aplicarlo, aborta sin intentar otro algoritmo.
+            $connection->statement('ALTER TABLE '.$grammar->wrapTable('costos_agricolas').' '.implode(', ', $additions).', ALGORITHM=INSTANT');
+
+            return;
+        }
         Schema::table('costos_agricolas', function (Blueprint $table) use ($missing) {
             foreach ($missing as $name) {
                 $table->decimal($name, 65, 30)->nullable();
